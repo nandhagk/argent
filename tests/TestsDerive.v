@@ -221,9 +221,36 @@ TimeFun len.
 
 Example len_after_section : T_len nat [1; 2] = 3 := eq_refl.
 
+(** * Convoys and primitive projections *)
+
+(** A match applied to a proof, the convoy pattern, keeps its proof binder in the time
+    function. *)
+Definition head_plus_one (l : list nat) : nat :=
+  (match l return l = l -> nat with
+   | [] => fun _ => 0
+   | x :: _ => fun _ => x + 1
+   end) eq_refl.
+
+TimeFun head_plus_one.
+
+Example convoy_cost : T_head_plus_one [4] = 1 + Nat.T_add 4 1 := eq_refl.
+
+#[projections(primitive)]
+Record point : Type := {
+  px : nat;
+  py : nat
+}.
+
+Definition point_sum (p : point) : nat := px p + py p.
+
+TimeFun point_sum.
+
+Example projection_cost : T_point_sum {| px := 2; py := 3 |} = 1 + Nat.T_add 2 3 := eq_refl.
+
 (** * Checking *)
 
-TimeCheck expensive redex partial sum let_fun sum_to even odd monadic size size_local.
+TimeCheck expensive redex partial sum let_fun sum_to even odd monadic size size_local poly_id
+  head_plus_one point_sum.
 
 TimeAudit use_opaque size partial.
 
