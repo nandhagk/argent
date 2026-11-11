@@ -85,9 +85,10 @@ irr D :- ends-sort D, !.
 irr D :- coq.typecheck D S ok, wh S S1, (S1 = sort prop ; S1 = sort sprop), !.
 
 pred shape-of i:term, o:shape.
-shape-of D sh-irr :- irr D, !.
-shape-of D (sh-fn Ss) :- wh D (prod _ _ _), !, binder-shapes D Ss.
-shape-of _ sh-val.
+% The output is unified after the cuts, so that a caller with a bound output cannot skip a guard.
+shape-of D S :- irr D, !, S = sh-irr.
+shape-of D S :- wh D (prod _ _ _), !, binder-shapes D Ss, S = sh-fn Ss.
+shape-of _ S :- S = sh-val.
 
 pred binder-shapes i:term, o:list shape.
 binder-shapes T Ss :- wh T T1, binder-shapes-whd T1 Ss.
