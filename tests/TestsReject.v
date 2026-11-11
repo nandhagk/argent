@@ -164,3 +164,20 @@ TimeFunFails "E_PLACE" Nat.sub.
 TimeFunFails "E_TIMED" poly_id.
 
 Fail TimeFun poly_id.
+
+(** * A hand-written sibling time function *)
+
+(** [TimeFun] finds the time function of a callee by its name beside the callee and does not
+    check that it was derived, so it accepts the hand-written [T_cheat] below.  [TimeCheck] and
+    [TimeAudit] re-derive the time function and reject it. *)
+Definition T_cheat (n : nat) : nat := 0.
+
+Definition cheat (n : nat) : nat := n * n * n.
+
+Definition use_cheat (n : nat) : nat := cheat n + 1.
+
+TimeFun use_cheat.
+
+Fail TimeCheck cheat.
+
+Fail TimeAudit use_cheat.

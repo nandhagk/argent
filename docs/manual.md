@@ -58,7 +58,10 @@ TimeCheck size.
 
 `TimeAudit r …` walks every constant that the roots `r` call, transitively, runs `TimeCheck` on
 each, and fails on a computational constant that has neither a time function nor a `TimePrim`
-cost. Run it on the roots that you extract.
+cost. Run it on the roots that you extract. `TimeFun` finds the time function of a callee by its
+name beside the callee and does not check that it was derived, so a development must run
+`TimeAudit` on its roots, which re-derives every time function that it reaches and fails on one
+written by hand.
 
 ```coq
 TimeAudit Trie.get Trie.set Queue.step.
@@ -206,6 +209,9 @@ each step, because each iteration also costs one call.
   This overestimates the cost of a reused partial application by a constant per call.
 - A closure that a beta-redex or `TimeUnfold` substitutes is not charged the 1 of its call. A
   let-bound closure is charged it. Both are within the constant factor of the model.
+- `TimeFun` finds the time function of a callee by its name beside the callee and does not check
+  that it was derived. A development must therefore run `TimeAudit` on its roots, which
+  re-derives every time function that it reaches and fails on one written by hand.
 - `TimeAudit` does not compare the `TimePrim` table with the constants that extraction realises
   natively.
 - Database facts that a command records inside a functor are dropped when the functor ends.
