@@ -3,14 +3,15 @@
     This file checks that [TimeFun] works inside functors.  A call of a parameter's operation
     [L.join] uses the parameter's time function [L.T_join], found by the sibling rule, and a
     functor instance carries the derived time functions of its body.  A bound proved inside the
-    functor uses only the contracts of the signature.
+    functor uses only the contracts of the signature.  A time function found beside a callee
+    with a body is derived again before it is used, also through [Include] and in an instance.
 
     For example, after [Module I := JoinAll BoolLattice], [I.T_join_all] calls
     [BoolLattice.T_join].
 
     Builds on: Time Tactics Std *)
 
-From Stdlib Require Import List Lia.
+From Stdlib Require Import List PArith Lia.
 From Argent Require Import Time Tactics Std.
 Import List.ListNotations.
 
@@ -69,3 +70,72 @@ Definition use_instance (l : list bool) : bool := I.join_all false l.
 TimeFun use_instance.
 
 Example use_instance_cost : T_use_instance [true] = 1 + I.T_join_all false [true] := eq_refl.
+
+(** * Checked sibling time functions
+
+    [TimeFun] derives again the time function that it finds beside a callee by the sibling rule
+    when that time function has a body.  A parameter of a signature, such as [K.T_encode], has
+    none and is used as it is.  The definitions below come into a timed functor by [Include]
+    from a functor that holds only code, and the instance [FP] is used from outside. *)
+
+Module Type KEY_OPS.
+  Parameter t : Type.
+  Parameter encode : t -> positive.
+End KEY_OPS.
+
+Module Type KEY_T.
+  Include KEY_OPS.
+  Parameter T_encode : t -> nat.
+End KEY_T.
+
+Module FooCode (K : KEY_OPS).
+  Definition twice (k : K.t) : positive := Pos.add (K.encode k) (K.encode k).
+End FooCode.
+
+Module Foo (K : KEY_OPS).
+  Include FooCode K.
+End Foo.
+
+Module FooT (K : KEY_T).
+  Include Foo K.
+
+  TimeFun twice.
+
+  Definition quad (k : K.t) : positive := Pos.add (twice k) (twice k).
+
+  TimeFun quad.
+
+  (** A hand-written time function in a functor body is caught. *)
+  Definition cheat (k : K.t) : positive := twice k.
+
+  Definition T_cheat (k : K.t) : nat := 0.
+
+  Definition use_cheat (k : K.t) : positive := cheat k.
+
+  Fail TimeFun use_cheat.
+
+  TimeFunFails "E_CHECK" use_cheat.
+End FooT.
+
+Module PosKey <: KEY_T.
+  Definition t : Type := positive.
+  Definition encode (p : t) : positive := p.
+  TimeFun encode.
+End PosKey.
+
+Module FP := FooT PosKey.
+
+Definition use_quad (p : positive) : positive := FP.quad p.
+
+TimeFun use_quad.
+
+Example use_quad_cost : T_use_quad 1%positive = 1 + FP.T_quad 1%positive := eq_refl.
+
+TimeCheck use_quad.
+
+TimeAudit use_quad.
+
+(** The hand-written time function is caught in the instance as well. *)
+Definition use_instance_cheat (p : positive) : positive := FP.cheat p.
+
+TimeFunFails "E_CHECK" use_instance_cheat.

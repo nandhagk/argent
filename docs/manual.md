@@ -49,6 +49,17 @@ Fixpoint size (t : tree) : nat :=
 TimeFun size.
 ```
 
+`TimeFun` charges a call of `g` with the time function of `g`. It takes the one that an earlier
+`TimeFun` recorded, or else the constant `T_g` beside `g`, which is how it finds the time
+functions of functor parameters and functor instances. When that `T_g` has a body, `TimeFun`
+derives the time function of `g` again and fails with `E_CHECK` when the result is not
+convertible with `T_g`. Deriving it again checks the callees of `g` in the same way, so a
+hand-written time function is caught at any depth. A `T_g` without a body, such as a `Parameter`
+of a module type, is used as it is. Each check runs once per command, and its result is
+recorded for later commands, until the end of the enclosing functor when there is one. A
+constant whose body is another constant, as in the module alias `Module K := K0.`, is charged
+with the time function of that constant, because extraction defines it as that constant.
+
 `TimeCheck f …` derives the time function of `f` again and fails when it is not convertible
 with the stored `T_f`. A time function therefore cannot be edited by hand.
 
@@ -58,10 +69,7 @@ TimeCheck size.
 
 `TimeAudit r …` walks every constant that the roots `r` call, transitively, runs `TimeCheck` on
 each, and fails on a computational constant that has neither a time function nor a `TimePrim`
-cost. Run it on the roots that you extract. `TimeFun` finds the time function of a callee by its
-name beside the callee and does not check that it was derived, so a development must run
-`TimeAudit` on its roots, which re-derives every time function that it reaches and fails on one
-written by hand.
+cost. Run it on the roots that you extract.
 
 ```coq
 TimeAudit Trie.get Trie.set Queue.step.
@@ -111,6 +119,7 @@ code.
 | `E_OPAQUE` | The constant, or a callee, is opaque or has no body. |
 | `E_SECTION` | The definition uses a section variable. Run `TimeFun` after the section closes, or make the variable a functor parameter. |
 | `E_TERM` | The term has a form that the translation does not support. |
+| `E_CHECK` | The time function found beside a callee is not the one derived from the callee's body. |
 | `E_NOT_CODE`, `E_PLACE`, `E_TIMED` | The command targets a type or proof, runs in the wrong module, or repeats an earlier derivation. |
 
 ## Tactics
@@ -209,9 +218,6 @@ each step, because each iteration also costs one call.
   This overestimates the cost of a reused partial application by a constant per call.
 - A closure that a beta-redex or `TimeUnfold` substitutes is not charged the 1 of its call. A
   let-bound closure is charged it. Both are within the constant factor of the model.
-- `TimeFun` finds the time function of a callee by its name beside the callee and does not check
-  that it was derived. A development must therefore run `TimeAudit` on its roots, which
-  re-derives every time function that it reaches and fails on one written by hand.
 - `TimeAudit` does not compare the `TimePrim` table with the constants that extraction realises
   natively.
 - Database facts that a command records inside a functor are dropped when the functor ends.

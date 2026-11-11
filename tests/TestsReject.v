@@ -165,19 +165,31 @@ TimeFunFails "E_TIMED" poly_id.
 
 Fail TimeFun poly_id.
 
-(** * A hand-written sibling time function *)
+(** * Hand-written sibling time functions *)
 
-(** [TimeFun] finds the time function of a callee by its name beside the callee and does not
-    check that it was derived, so it accepts the hand-written [T_cheat] below.  [TimeCheck] and
-    [TimeAudit] re-derive the time function and reject it. *)
+(** [TimeFun] derives again the time function that it finds beside a callee, and rejects the
+    hand-written [T_cheat] below because it differs from the derived one.  [TimeCheck] rejects
+    it too. *)
 Definition T_cheat (n : nat) : nat := 0.
 
 Definition cheat (n : nat) : nat := n * n * n.
 
 Definition use_cheat (n : nat) : nat := cheat n + 1.
 
-TimeFun use_cheat.
+Fail TimeFun use_cheat.
+
+TimeFunFails "E_CHECK" use_cheat.
 
 Fail TimeCheck cheat.
 
-Fail TimeAudit use_cheat.
+(** The check is transitive: [T_mid] is what [TimeFun mid] would derive from the body of [mid],
+    but it calls the hand-written [T_cheat], which the check of [T_mid] derives again. *)
+Definition mid (n : nat) : nat := cheat n.
+
+Definition T_mid (n : nat) : nat := 1 + T_cheat n.
+
+Definition use_mid (n : nat) : nat := mid n + 1.
+
+Fail TimeFun use_mid.
+
+TimeFunFails "E_CHECK" use_mid.

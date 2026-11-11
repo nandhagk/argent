@@ -13,18 +13,21 @@ From elpi Require Import elpi.
 
 (** * Databases
 
-    [timed f T_f] records a time function placed under a mirrored module path, for a constant of
-    another library.  Time functions placed beside their constant are found by the sibling rule
-    instead, which also works inside functors, where Elpi databases cannot be extended.
+    [timed f T_f] records each time function that [TimeFun] declares.  Facts recorded inside a
+    functor are dropped when it ends, so the time function of a functor parameter or of a
+    functor instance is found by the sibling rule instead, as the constant [T_f] beside [f].
     [prim c e] is the cost of a built-in constant, declared with [TimePrim].  [unfold c] marks a
     constant that is unfolded before translation, declared with [TimeUnfold].  [bound T_g L]
-    registers a bound lemma for [time_pose], declared with [TimeBound]. *)
+    registers a bound lemma for [time_pose], declared with [TimeBound].  [verified f] records
+    that the time function found beside [f] by the sibling rule is the one derived from the body
+    of [f]. *)
 
 Elpi Db argent.time.db lp:{{
 pred timed i:gref, o:gref.
 pred prim i:gref, o:term.
 pred unfold-const i:gref.
 pred bound i:gref, o:gref.
+pred verified i:gref.
 }}.
 
 (** * The translator
@@ -51,11 +54,20 @@ pred tfun i:term, o:term.
 pred expect-error o:safe.
 % Audit mode: every looked-up callee is recorded in the safe.
 pred callee-safe o:safe.
+% The constant whose time function is being derived, the innermost one first.
+pred deriving o:gref.
+% Set while the time function of a callee is derived again to check it.
+pred verifying.
+% Capture mode: errors are recorded in the safe, with their messages, instead of being raised.
+pred capture-error o:safe.
+% The callees whose sibling time function this command has already checked.
+pred verify-memo o:safe.
 
 % ---------------------------------------------------------------------------------------------
 % Errors
 
 pred err i:string, i:string.
+err Code Msg :- capture-error S, !, stash_in_safe S (pr Code Msg), fail.
 err Code _ :- expect-error S, !, stash_in_safe S Code, fail.
 err Code Msg :- coq.error {calc ("Argent [" ^ Code ^ "]: " ^ Msg)}.
 
@@ -179,8 +191,60 @@ lookup GR TGR :- timed GR TGR, !.
 lookup GR TGR :- GR = const _, sibling GR "T_" "" TGR, !.
 
 pred record i:gref.
-record GR :- callee-safe S, !, stash_in_safe S GR.
+record GR :- callee-safe S, not verifying, !, stash_in_safe S GR.
 record _.
+
+% [check-callee GR TGR]: TGR, the time function that lookup found for the callee GR, may be
+% used.  A time function recorded by TimeFun, or one without a body (a parameter of a functor),
+% is used as it is.  A sibling with a body must be the one derived from the body of GR; the
+% check derives it again, which checks the callees of GR in turn, and is remembered for the rest
+% of the command and, through the database, for later commands.
+pred check-callee i:gref, i:gref.
+check-callee GR TGR :- timed GR TGR, !.
+check-callee _ (const TC) :- coq.env.const-body TC none, !.
+check-callee (const C) (const TC) :- alias-of C G, alias-of TC TG, lookup G TG, !,
+  check-callee G TG.
+check-callee GR _ :- verified GR, !.
+check-callee GR _ :- verify-memo S, open_safe S Done, std.mem! Done GR, !.
+check-callee GR TGR :- new_safe E, verify-callee E GR TGR, remember-verified GR.
+
+% [alias-of C G]: the body of C is the constant G.  The constants of a module alias, such as
+% [Module K := K0.], read this way, and so do [Definition f := g.] and [Definition T_f := T_g.],
+% which cost what g and T_g cost, since extraction defines f as g.
+pred alias-of i:constant, o:gref.
+alias-of C G :- coq.env.const-body C (some Bo), (Bo = global G ; Bo = pglobal G _), !.
+
+pred verify-callee i:safe, i:gref, i:gref.
+verify-callee E GR (const TC) :- coq.env.const-body TC (some Old),
+  (capture-error E => verifying => derive-owner GR (const TC) New), !,
+  (coq.unify-eq Old New ok, ! ;
+   err "E_CHECK" {calc ({caller-name} ^ " calls " ^ {gstr GR} ^ ", whose time function " ^
+     {gstr (const TC)} ^ " differs from the one derived from its body")}).
+verify-callee E GR TGR :- open_safe E Errs, first-error Errs Why,
+  err "E_CHECK" {calc ({caller-name} ^ " calls " ^ {gstr GR} ^ ", whose time function " ^
+    {gstr TGR} ^ " cannot be checked: " ^ Why)}.
+
+% [derive-owner GR TGR New]: New is the time function derived for the constant beside TGR.
+pred derive-owner i:gref, i:gref, o:term.
+derive-owner GR TGR New :- owner GR TGR G0, derive G0 Rs, std.mem Rs (res G0 New), !.
+
+pred caller-name o:string.
+caller-name S :- deriving GR, !, gstr GR S.
+caller-name "the definition".
+
+pred first-error i:list (pair string string), o:string.
+first-error [pr Code Msg|_] S :- !, S is "[" ^ Code ^ "] " ^ Msg.
+first-error [] "its body cannot be translated".
+
+pred remember-verified i:gref.
+remember-verified GR :- verify-memo S, !, stash_in_safe S GR, store-verified GR.
+remember-verified GR :- store-verified GR.
+
+% A dry run of TimeFunFails declares nothing.
+pred store-verified i:gref.
+store-verified _ :- expect-error _, !.
+store-verified GR :-
+  @global! => coq.elpi.accumulate execution-site "argent.time.db" (clause _ _ (verified GR)).
 
 pred unfold-head i:term, o:term.
 unfold-head (global (const C)) Bo :- unfold-const (const C), !, coq.env.const-body C (some Bo).
@@ -302,7 +366,7 @@ pred call i:term, i:list shape, i:list term, o:term.
 call H _ _ {{ 0 }} :- head-gref H (indc _), !.
 call H _ As2 R :- currec H Nc TF, !, drop-n Nc As2 Rest, beta-app TF Rest R.
 call H Ks _ {{ 0 }} :- head-gref H (const _), std.forall Ks (k\ k = sh-irr), !.
-call H _ As2 R :- head-gref H GR, lookup GR TGR, !, record GR,
+call H _ As2 R :- head-gref H GR, lookup GR TGR, !, check-callee GR TGR, record GR,
   coq.env.global TGR TH, coq.mk-app TH As2 R.
 call H _ As2 R :- tfun H TH, !, coq.mk-app TH As2 R.
 call H _ As2 R :- head-gref H GR, prim GR E, !, record GR, beta-app E As2 R.
@@ -585,7 +649,7 @@ strip-params [P|Ps] (fun _ _ B) M :- strip-params Ps (B P) M.
 pred derive i:gref, o:list result.
 derive GR Rs :-
   GR = const C, coq.env.global GR F, const-body-at F C Bo,
-  lams F [] 0 none Bo R0 Ms, derive-others F Bo GR R0 Ms Rs.
+  deriving GR => (lams F [] 0 none Bo R0 Ms, derive-others F Bo GR R0 Ms Rs).
 
 pred const-body-at i:term, i:constant, o:term.
 const-body-at (pglobal _ I) C Bo :- !, @uinstance! I => coq.env.const-body C (some Bo).
@@ -736,7 +800,7 @@ Elpi Command TimeFun.
 Elpi Accumulate Db argent.time.db.
 Elpi Accumulate File argent.time.lib.
 Elpi Accumulate lp:{{
-main Args :- time-args Args.
+main Args :- new_safe M, verify-memo M => time-args Args.
 
 pred time-args i:list argument.
 time-args [] :- !.
@@ -757,7 +821,7 @@ Elpi Command TimeCheck.
 Elpi Accumulate Db argent.time.db.
 Elpi Accumulate File argent.time.lib.
 Elpi Accumulate lp:{{
-main Args :- std.forall Args check-arg.
+main Args :- new_safe M, verify-memo M => std.forall Args check-arg.
 
 pred check-arg i:argument.
 check-arg (str S) :- !, coq.locate S GR, timecheck GR.
@@ -774,8 +838,8 @@ Elpi Command TimeAudit.
 Elpi Accumulate Db argent.time.db.
 Elpi Accumulate File argent.time.lib.
 Elpi Accumulate lp:{{
-main Args :- std.map Args root-gref Roots, audit Roots [] N, coq.say "TimeAudit: checked" N
-  "time functions".
+main Args :- std.map Args root-gref Roots, new_safe M, (verify-memo M => audit Roots [] N),
+  coq.say "TimeAudit: checked" N "time functions".
 
 pred root-gref i:argument, o:gref.
 root-gref (str S) GR :- !, coq.locate S GR.

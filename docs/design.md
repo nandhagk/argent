@@ -139,6 +139,12 @@ T_f := λ params⁺. [fix T_F args⁺ {struct i⁺}] 1 + T⟦body[F := f params]
   and accepts only a hit whose own path equals the constant's path. The sibling rule finds the
   time functions of functor parameters and of functor instances, where Elpi databases cannot be
   extended. Lookup tries the `TimePrim` table last.
+- A time function found by the sibling rule that has a body is checked before it is used. The
+  translator derives the time function of the callee again, which checks the callee's own
+  callees in the same way, and requires the result to be convertible with the stored one. It
+  reports `E_CHECK` otherwise. A sibling without a body, a `Parameter` of a module type, is used
+  as it is. A callee whose body is another constant, as in a module alias, is checked through
+  that constant. Each check runs once per command and is recorded in the database.
 - `T_f` copies the implicit status of `f`, with every companion explicit, and is universe
   polymorphic iff `f` is.
 - A definition that uses a section variable is rejected with `E_SECTION`, because its arity
