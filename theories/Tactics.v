@@ -67,35 +67,73 @@ Elpi Tactic time_pose.
 Elpi Accumulate Db argent.time.db.
 Elpi Accumulate File argent.time.lib.
 Elpi Accumulate lp:{{
-% [sub Ctx T S]: S is a subterm of T, closed under the binders of T, applying a time function
-% that has a bound.
-pred sub i:list prop, i:term, o:term.
-sub Ctx (app [H|_] as T) T :- has-bound Ctx H.
-sub Ctx (app L) S :- std.mem L X, sub Ctx X S.
-sub Ctx (fun _ T B) S :- sub Ctx T S ; pi x\ sub Ctx (B x) S.
-sub Ctx (prod _ T B) S :- sub Ctx T S ; pi x\ sub Ctx (B x) S.
-sub Ctx (let _ T V B) S :- sub Ctx T S ; sub Ctx V S ; pi x\ sub Ctx (B x) S.
-sub Ctx (match E _ Bs) S :- sub Ctx E S ; (std.mem Bs B, sub Ctx B S).
+% The search is deterministic and uses no findall, because type checking and unification of
+% universe-polymorphic terms may declare constraints, which findall forbids.
 
-pred has-bound i:list prop, i:term.
-has-bound Ctx H :- prover Ctx H _ _, !.
+% [subs T Acc R]: R adds to Acc the applications in T that are closed under the binders of T.
+pred subs i:term, i:list term, o:list term.
+subs (app L as T) Acc [T|R] :- !, subs-list L Acc R.
+subs (fun _ T B) Acc R :- !, subs T Acc Acc1, under B Acc1 R.
+subs (prod _ T B) Acc R :- !, subs T Acc Acc1, under B Acc1 R.
+subs (let _ T V B) Acc R :- !, subs T Acc Acc1, subs V Acc1 Acc2, under B Acc2 R.
+subs (match E _ Bs) Acc R :- !, subs E Acc Acc1, subs-list Bs Acc1 R.
+subs _ Acc Acc.
 
-% [prover Ctx H P Ty]: P of type Ty proves forall x̄, [premises ->] H ā <= B, for the time
-% function H.  It is a registered lemma, the sibling lemma T_g_le, or a quantified hypothesis
-% such as an induction hypothesis.
-pred prover i:list prop, i:term, o:term, o:term.
-prover _ H LT Ty :- head-gref H G, bound G L, coq.env.global L LT, coq.env.typeof L Ty.
-prover _ H LT Ty :- head-gref H G, G = const _, sibling G "" "_le" L,
-  coq.env.global L LT, coq.env.typeof L Ty.
-prover Ctx H V Ty :- std.mem Ctx (decl V _ Ty), Ty = prod _ _ _, inst-ty Ty _ C, lhs C L,
-  L = app [H|_].
+pred subs-list i:list term, i:list term, o:list term.
+subs-list [] Acc Acc.
+subs-list [X|Xs] Acc R :- subs X Acc Acc1, subs-list Xs Acc1 R.
 
-% [instance Ctx S P]: a bound instantiated on the arguments of S, possibly still waiting for
-% premises.
-pred instance i:list prop, i:term, o:term.
-instance Ctx (app [H|_] as S) P :- prover Ctx H LT Ty,
-  inst-ty Ty Xs C, lhs C Lhs, Lhs = S,
-  determined Xs Ys, coq.mk-app LT Ys P.
+% The subterms under a binder, keeping those that do not mention the bound variable.
+pred under i:(term -> term), i:list term, o:list term.
+under B Acc R :- (pi x\ subs (B x) [] (L x)), keep-closed L Acc R.
+
+pred keep-closed i:(term -> list term), i:list term, o:list term.
+keep-closed (_\ []) Acc Acc :- !.
+keep-closed (x\ [T|Ts x]) Acc R :- !, keep-closed Ts [T|Acc] R.
+keep-closed (x\ [Y_ x|Ts x]) Acc R :- keep-closed Ts Acc R.
+
+% [provers Ctx H Ps]: the proofs, with their types, of bounds of the form
+% forall x̄, [premises ->] H ā <= B: registered lemmas, the sibling lemma T_g_le, and quantified
+% hypotheses such as induction hypotheses.
+pred provers i:list prop, i:term, o:list (pair term term).
+provers Ctx H Ps :- global-provers H Gs, local-provers Ctx H Ls, std.append Gs Ls Ps.
+
+pred global-provers i:term, o:list (pair term term).
+global-provers H Ps :- head-gref H G, !, std.findall (bound G L_) Bs,
+  std.map Bs (b\ l\ b = bound _ l) Ls0, sibling-prover G Ls0 Ls, std.map Ls lemma-prover Ps.
+global-provers _ [].
+
+pred sibling-prover i:gref, i:list gref, o:list gref.
+sibling-prover G Ls [L|Ls] :- G = const _, sibling G "" "_le" L, !.
+sibling-prover _ Ls Ls.
+
+pred lemma-prover i:gref, o:pair term term.
+lemma-prover L (pr LT Ty) :- coq.env.global L LT, coq.env.typeof L Ty.
+
+pred local-provers i:list prop, i:term, o:list (pair term term).
+local-provers [] _ [].
+local-provers [decl V _ Ty|Ctx] H [pr V Ty|Ps] :- local-bound Ty H, !, local-provers Ctx H Ps.
+local-provers [_|Ctx] H Ps :- local-provers Ctx H Ps.
+
+pred local-bound i:term, i:term.
+local-bound (prod _ _ _ as Ty) H :- inst-ty Ty _ C, lhs C L, L = app [H|_].
+
+% [instances Ps S Acc R]: R adds to Acc each prover in Ps instantiated on the arguments of S,
+% possibly still waiting for premises.
+pred instances i:list (pair term term), i:term, i:list term, o:list term.
+instances [] _ Acc Acc.
+instances [pr LT Ty|Ps] S Acc R :- instance LT Ty S P, !, instances Ps S [P|Acc] R.
+instances [_|Ps] S Acc R :- instances Ps S Acc R.
+
+pred instance i:term, i:term, i:term, o:term.
+instance LT Ty S P :- inst-ty Ty Xs C, lhs C Lhs, Lhs = S, determined Xs Ys,
+  coq.mk-app LT Ys P, coq.typecheck P _ ok.
+
+pred all-instances i:list prop, i:list term, i:list term, o:list term.
+all-instances _ [] Acc Acc.
+all-instances Ctx [(app [H|_] as S)|Ss] Acc R :- !, provers Ctx H Ps, instances Ps S Acc Acc1,
+  all-instances Ctx Ss Acc1 R.
+all-instances Ctx [_|Ss] Acc R :- all-instances Ctx Ss Acc R.
 
 pred inst-ty i:term, o:list term, o:term.
 inst-ty (prod _ _ B) [X|Xs] C :- !, inst-ty (B X) Xs C.
@@ -115,21 +153,12 @@ uniq [] _ [] :- !.
 uniq [X|Xs] Seen Ys :- std.mem! Seen X, !, uniq Xs Seen Ys.
 uniq [X|Xs] Seen [X|Ys] :- uniq Xs [X|Seen] Ys.
 
-% The instances that type-check; checked outside findall, which forbids new constraints.
-pred well-typed i:list term, o:list term.
-well-typed [] [].
-well-typed [P|Ps] [P|Qs] :- coq.typecheck P _ ok, !, well-typed Ps Qs.
-well-typed [_|Ps] Qs :- well-typed Ps Qs.
-
 pred conj-of i:list term, o:term.
 conj-of [] {{ I }}.
 conj-of [P|Ps] {{ conj lp:P lp:Q }} :- conj-of Ps Q.
 
 solve (goal Ctx _ Ty _ _ as G) GL :-
-  std.findall (sub Ctx Ty S_) Subs, std.map Subs (s\ t\ s = sub _ _ t) Ts,
-  std.findall (std.mem Ts T_, instance Ctx T_ P_) Insts,
-  std.map Insts (i\ p\ sigma T\ i = (std.mem _ T, instance _ T p)) Ps0,
-  uniq Ps0 [] Ps1, well-typed Ps1 Ps,
+  subs Ty [] Ss0, uniq Ss0 [] Ss, all-instances Ctx Ss [] Ps0, uniq Ps0 [] Ps,
   (Ps = [], !, GL = [seal G] ;
    conj-of Ps Pf, std.assert-ok! (coq.elaborate-skeleton Pf _ Pf2) "time_pose",
    coq.ltac.call "time_pose_conj" [trm Pf2] G GL).
