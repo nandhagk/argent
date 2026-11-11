@@ -11,7 +11,7 @@
 
     Builds on: Time Loop Amortised *)
 
-From Stdlib Require Import Lia.
+From Stdlib Require Import PeanoNat Lia.
 From elpi Require Import elpi.
 From Argent Require Import Time Loop Amortised.
 
@@ -173,12 +173,94 @@ Ltac time_cases :=
     | |- context [match ?e with _ => _ end] => destruct e
     end.
 
+(** * Linear arithmetic over products
+
+    A contract such as [T_get k m <= c_map * (bits k + 1)] multiplies an abstract constant by a
+    size.  After distribution, the goal is linear in products such as [c_map * bits k], which
+    [time_lin] replaces by fresh variables before it calls [lia]. *)
+
+(** A marker for a factor whose monotone consequences are already posed. *)
+Definition time_done (c : nat) : Prop := True.
+
+(** Succeed when [n] is a numeral of [nat].  The leading [idtac] makes the match run when the
+    tactic runs, so that [assert_fails] catches its failure. *)
+Ltac time_numeral n :=
+  idtac;
+  lazymatch n with
+  | O => idtac
+  | S ?m => time_numeral m
+  end.
+
+(** Distribute products over sums in the goal and in every hypothesis. *)
+Ltac time_distribute :=
+  rewrite ?Nat.mul_add_distr_l, ?Nat.mul_add_distr_r, ?Nat.mul_succ_r, ?Nat.mul_1_r,
+    ?Nat.mul_1_l, ?Nat.mul_0_r, ?Nat.mul_0_l, ?Nat.add_0_l, ?Nat.add_0_r in *.
+
+(** Add [c * a <= c * b] for each hypothesis [a <= b] or [a < b] that mentions no product by
+    [c].  The new hypotheses mention a product by [c], so this runs one round. *)
+Ltac time_mono_with c :=
+  repeat
+    match goal with
+    | H : ?a <= ?b |- _ =>
+      assert_fails (idtac; match type of H with context [(c * _)%nat] => idtac end);
+      assert_fails (idtac; match goal with _ : (c * a <= c * b)%nat |- _ => idtac end);
+      pose proof (Nat.mul_le_mono_l a b c H)
+    | H : ?a < ?b |- _ =>
+      assert_fails (idtac; match type of H with context [(c * _)%nat] => idtac end);
+      assert_fails (idtac; match goal with _ : (c * a <= c * b)%nat |- _ => idtac end);
+      pose proof (Nat.mul_le_mono_l a b c (Nat.lt_le_incl a b H))
+    end.
+
+(** Run [time_mono_with] once for every abstract constant [c], such as a [Parameter] of a
+    signature or a definition that stays folded, that multiplies a term of the goal or of a
+    hypothesis.  Factors that are not constants, such as bit lengths, get no consequences, so
+    that a goal that needs [nia] reaches it quickly. *)
+Ltac time_mono :=
+  repeat
+    match goal with
+    | |- context [(?c * _)%nat] =>
+      is_const c;
+      assert_fails (idtac; match goal with _ : time_done c |- _ => idtac end);
+      time_mono_with c; assert (time_done c) by exact I
+    | _ : context [(?c * _)%nat] |- _ =>
+      is_const c;
+      assert_fails (idtac; match goal with _ : time_done c |- _ => idtac end);
+      time_mono_with c; assert (time_done c) by exact I
+    end.
+
+(** Replace every product of two terms that are not numerals by a fresh variable, in the goal
+    and in the hypotheses alike. *)
+Ltac time_generalise :=
+  repeat
+    match goal with
+    | |- context [(?x * ?y)%nat] =>
+      assert_fails (idtac; time_numeral x); assert_fails (idtac; time_numeral y);
+      let v := fresh "time_prod" in
+      set (v := (x * y)%nat) in *; clearbody v
+    | _ : context [(?x * ?y)%nat] |- _ =>
+      assert_fails (idtac; time_numeral x); assert_fails (idtac; time_numeral y);
+      let v := fresh "time_prod" in
+      set (v := (x * y)%nat) in *; clearbody v
+    end.
+
+(** Succeed when an abstract constant multiplies a term of the goal or of a hypothesis. *)
+Ltac time_has_const :=
+  match goal with
+  | |- context [(?c * _)%nat] => is_const c
+  | _ : context [(?c * _)%nat] |- _ => is_const c
+  end.
+
+(** Close a goal that is linear over products, or fail and leave the goal as it was.  It runs
+    only when an abstract constant multiplies a term, so that other goals reach [nia] at once. *)
+Ltac time_lin :=
+  solve [time_has_const; time_distribute; time_mono; time_distribute; time_generalise; lia].
+
 (** On the goal [t], which unfolds one time function of the original goal by one step: simplify,
-    compute the specification functions, pose the callee bounds and try [nia], first as is and
-    then after case analysis on the remaining matches. *)
+    compute the specification functions, pose the callee bounds and try [time_lin] and then
+    [nia], first as is and then after case analysis on the remaining matches. *)
 Ltac time_step_rest t :=
-  time_change t; time_simpl; cbn; elpi time_pose; cbn in *; try nia;
-  try (time_cases; elpi time_pose; cbn in *; nia).
+  time_change t; time_simpl; cbn; elpi time_pose; cbn in *; try first [time_lin | nia];
+  try (time_cases; elpi time_pose; cbn in *; first [time_lin | nia]).
 
 Elpi Tactic time_step.
 Elpi Accumulate Db argent.time.db.

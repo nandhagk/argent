@@ -139,3 +139,65 @@ TimeAudit use_quad.
 Definition use_instance_cheat (p : positive) : positive := FP.cheat p.
 
 TimeFunFails "E_CHECK" use_instance_cheat.
+
+(** * Contracts with abstract constants
+
+    A contract multiplies an abstract constant of the signature by a size.  [time_step]
+    distributes the products, adds the monotone consequences [c * a <= c * b] of the hypotheses
+    [a <= b], replaces the remaining products by variables and calls [lia]. *)
+
+Module Type TWO_COSTS.
+  Parameter f : nat -> nat.
+  Parameter g : nat -> nat.
+  Parameter T_f : nat -> nat.
+  Parameter T_g : nat -> nat.
+  Parameter c1 : nat.
+  Parameter c2 : nat.
+  Parameter T_f_le : forall n, T_f n <= c1 * (n + 1).
+  Parameter T_g_le : forall n, T_g n <= c2 * (n + 1).
+End TWO_COSTS.
+
+Module UseTwo (M : TWO_COSTS).
+  Definition both (n m : nat) : nat * nat := (M.f n, M.g m).
+
+  TimeFun both.
+
+  Lemma T_both_le (n m : nat) : T_both n m <= M.c1 * (n + 1) + M.c2 * (m + 1) + 1.
+  Proof.
+    time_step.
+  Qed.
+
+  Definition twice_f (n m : nat) : nat * nat := (M.f n, M.f m).
+
+  TimeFun twice_f.
+
+  (** The bound needs [M.c1 * n <= M.c1 * m] from [n <= m]. *)
+  Lemma T_twice_f_le (n m : nat) : n <= m -> T_twice_f n m <= 2 * M.c1 * (m + 1) + 1.
+  Proof.
+    intros Hnm. time_step.
+  Qed.
+
+  (** A bound that does not hold leaves the goal as [time_step] found it, with its products. *)
+  Lemma T_twice_f_wrong (n : nat) : T_twice_f n n <= M.c1 * n.
+  Proof.
+    time_step.
+    lazymatch goal with
+    | |- context [M.c1 * _] => idtac
+    end.
+    assert_fails (clear time_prod).
+  Abort.
+End UseTwo.
+
+(** [time_lin] alone closes a goal that needs the monotone consequence [c * a <= c * b] of
+    [a <= b] for the folded constant [c], and fails on products that it cannot relate. *)
+Definition c : nat := 3.
+
+Example time_lin_mono (a b t : nat) : a <= b -> t <= c * (a + 1) -> t <= c * (b + 1).
+Proof.
+  intros Hab Ht. time_lin.
+Qed.
+
+Example time_lin_fails (a b : nat) : c * a <= c * b.
+Proof.
+  Fail time_lin.
+Abort.
