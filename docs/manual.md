@@ -97,7 +97,9 @@ TimePrimTable opaque_double opaque_triple.
 
 `TimeUnfold c …` makes the translation unfold `c` at every call before translating it. A
 beta-redex `(fun x => k) m` is charged as `let x := m in k`. Code written in an identity monad
-therefore costs what the same code written with `let` costs.
+therefore costs what the same code written with `let` costs. `TimeUnfold` rejects a recursive
+constant, because inlining its fixpoint at every call costs what a call of its time function
+costs and hides that time function from its bound.
 
 ```coq
 Definition bind {A B : Type} (m : M A) (f : A -> M B) : M B := f m.
@@ -130,6 +132,7 @@ code.
 | `E_OPAQUE` | The constant, or a callee, is opaque or has no body. |
 | `E_SECTION` | The definition uses a section variable. Run `TimeFun` after the section closes, or make the variable a functor parameter. |
 | `E_TERM` | The term has a form that the translation does not support. |
+| `E_ILLTYPED` | The derived time function does not typecheck, for example when a function argument returns a function where a polymorphic callee expects data. |
 | `E_CHECK` | The time function found beside a callee is not the one derived from the callee's body. |
 | `E_NOT_CODE`, `E_PLACE`, `E_TIMED` | The command targets a type or proof, runs in the wrong module, or repeats an earlier derivation. |
 

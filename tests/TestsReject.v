@@ -224,3 +224,44 @@ Definition calls_sub (n : nat) : nat := Nat.sub n 1.
 Fail TimeFun calls_sub.
 
 TimeFunFails "E_NO_TIME" calls_sub.
+
+(** * An ill-typed translation
+
+    [map] expects data of type [B], here [nat -> nat], from its function argument, so the
+    companion of [Nat.add] would return a function where [map] expects a cost.  The translation
+    is ill-typed and rejected with [E_ILLTYPED]. *)
+Definition adders (l : list nat) : list (nat -> nat) := map Nat.add l.
+
+Fail TimeFun adders.
+
+TimeFunFails "E_ILLTYPED" adders.
+
+(** * A closure in a value position
+
+    The branch [fun x => x] has the type [sel true], which is a function type only after the
+    match is reduced, so the translation meets the closure itself in a value position. *)
+Definition sel (b : bool) : Type := if b then nat -> nat else nat.
+
+Definition closure_in_branch (b : bool) : sel b :=
+  match b return sel b with
+  | true => fun x => x
+  | false => 0
+  end.
+
+Fail TimeFun closure_in_branch.
+
+TimeFunFails "E_CLOSURE" closure_in_branch.
+
+(** * Unfolding a recursive constant
+
+    Unfolding a recursive constant would inline its fixpoint at every call, which costs what a
+    call of its time function costs, so [TimeUnfold] rejects it. *)
+Fixpoint count (n : nat) : nat :=
+  match n with
+  | 0 => 0
+  | S m => S (count m)
+  end.
+
+Fail TimeUnfold count.
+
+Fail TimeUnfold length.

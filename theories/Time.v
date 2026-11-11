@@ -969,8 +969,18 @@ unfold-arg (str S) :- !, coq.locate S GR, unfold-ok GR,
 unfold-arg A :- coq.error "TimeUnfold: expected constant names, got" A.
 
 pred unfold-ok i:gref.
+unfold-ok (const C) :- coq.env.const C (some Bo) _, recursive Bo, !,
+  coq.error "TimeUnfold:" {gstr (const C)} "is recursive. Unfolding it would inline its"
+    "fixpoint at every call, which costs what a call of its own time function costs; run"
+    "TimeFun on it instead".
 unfold-ok (const C) :- coq.env.const C (some _) _, !.
 unfold-ok GR :- coq.error "TimeUnfold:" {gstr GR} "is not a transparent constant".
+
+% A recursive constant: its body under its parameters is a fixpoint.
+pred recursive i:term.
+recursive (fun _ _ B) :- !, pi x\ recursive (B x).
+recursive (fix _ _ _ _).
+recursive (mfix _ _ _).
 }}.
 
 Elpi Export TimeUnfold.
