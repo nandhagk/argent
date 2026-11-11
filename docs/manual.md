@@ -222,4 +222,6 @@ each step, because each iteration also costs one call.
   natively.
 - Database facts that a command records inside a functor are dropped when the functor ends.
   So `TimePrim`, `TimeUnfold`, `TimeBound` and `TimeFun` for a constant of another library
-  belong outside functors.
+  belong outside functors. rocq-elpi gives no way to tell that a command runs inside a functor,
+  so these commands cannot reject it there. The message of `E_NO_TIME` and of `E_OPAQUE` for a
+  callee names this cause, and a bound registered inside a functor is simply not posed.

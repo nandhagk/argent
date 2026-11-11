@@ -193,3 +193,34 @@ Definition use_mid (n : nat) : nat := mid n + 1.
 Fail TimeFun use_mid.
 
 TimeFunFails "E_CHECK" use_mid.
+
+(** * Registrations inside a functor
+
+    The facts that a command records inside a functor are dropped when the functor ends, and
+    rocq-elpi gives no way to tell that a command runs inside one.  So the registrations in
+    [Registers] have no effect after it ends, and a call of a constant registered there is
+    rejected with [E_NO_TIME], whose message names this cause. *)
+Definition wrapped (n : nat) : nat := S n.
+
+Module Type EMPTY.
+End EMPTY.
+
+Module Registers (X : EMPTY).
+  TimeUnfold wrapped.
+
+  Module Nat.
+    TimeFun Nat.sub.
+  End Nat.
+End Registers.
+
+Definition calls_wrapped (n : nat) : nat := wrapped n.
+
+Fail TimeFun calls_wrapped.
+
+TimeFunFails "E_NO_TIME" calls_wrapped.
+
+Definition calls_sub (n : nat) : nat := Nat.sub n 1.
+
+Fail TimeFun calls_sub.
+
+TimeFunFails "E_NO_TIME" calls_sub.

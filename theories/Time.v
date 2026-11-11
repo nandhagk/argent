@@ -376,7 +376,8 @@ call H _ _ _ :- no-time H.
 pred no-time i:term.
 no-time H :- head-gref H (const C), coq.env.opaque? C, !,
   err "E_OPAQUE" {calc ("the opaque constant " ^ {tstr H} ^
-    " has no time function; make it transparent or declare its cost with TimePrim")}.
+    " has no time function; make it transparent or declare its cost with TimePrim" ^
+    {functor-hint})}.
 no-time H :- head-gref H (const C), coq.env.section-variables Vs, std.mem! Vs C, !,
   err "E_SECTION" {calc ("call of the section variable " ^ {tstr H} ^
     "; make it a functor parameter or run TimeFun after the section is closed")}.
@@ -385,13 +386,21 @@ no-time H :- head-gref H GR, coq.gref->id GR Id, wf-name Id, !,
     " is not supported; use Argent.Loop.loop or loop_fuel")}.
 no-time H :- head-gref H (const C), coq.env.const C none _, !,
   err "E_NO_TIME" {calc ("no time function for " ^ {tstr H} ^
-    ", which has no body; declare its cost with TimePrim")}.
+    ", which has no body; declare its cost with TimePrim" ^ {functor-hint})}.
 no-time H :- head-gref H _, !,
-  err "E_NO_TIME" {calc ("no time function for " ^ {tstr H} ^ "; run TimeFun on it first")}.
+  err "E_NO_TIME" {calc ("no time function for " ^ {tstr H} ^ "; run TimeFun on it first" ^
+    {functor-hint})}.
 no-time H :- name H, !,
   err "E_NO_TIME" {calc ("call of the local function " ^ {tstr H} ^
     ", which has no time function (a closure stored in data?)")}.
 no-time H :- err "E_NO_TIME" {calc ("call of " ^ {tstr H} ^ ", which has no time function")}.
+
+% rocq-elpi gives no way to tell that a command runs inside a functor, where the facts that
+% TimeFun, TimePrim, TimeUnfold and TimeBound record are dropped at its end, so the message of a
+% missing time function names that cause.
+pred functor-hint o:string.
+functor-hint S :- S is "; a TimeFun for a constant of another library, a TimePrim or a " ^
+  "TimeUnfold that ran inside a functor is lost at the end of the functor, so run it outside".
 
 % ---------------------------------------------------------------------------------------------
 % Function values: C⟦e⟧ and F⟦e⟧, for a slot whose binders have shapes Ss and whose
