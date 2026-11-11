@@ -83,14 +83,38 @@ Fail TimeFun closure_result.
 
 TimeFunFails "E_CLOSURE" closure_result.
 
-(** * Well-founded recursion *)
+(** * Well-founded recursion
 
+    Std derives the time functions of [Fix], [Fix_F], [Acc_rect] and
+    [well_founded_induction_type], so a definition by [Fix] is accepted.  A recursor of two
+    arguments has no time function and is rejected with [E_WF], and so is well-founded
+    recursion whose result is a function that is then called. *)
 Definition by_fix (n : nat) : nat :=
   Fix (well_founded_ltof nat (fun k => k)) (fun _ => nat) (fun _ _ => 0) n.
 
-Fail TimeFun by_fix.
+TimeFun by_fix.
 
-TimeFunFails "E_WF" by_fix.
+Definition by_fix2 (n m : nat) : nat :=
+  well_founded_induction_type_2 (fun _ _ => nat) (well_founded_ltof (nat * nat) fst)
+    (fun _ _ _ => 0) n m.
+
+Fail TimeFun by_fix2.
+
+TimeFunFails "E_WF" by_fix2.
+
+Definition fix_fn_result (n : nat) : nat :=
+  Fix (well_founded_ltof nat (fun k => k)) (fun _ => nat -> nat) (fun _ _ m => m) n 0.
+
+Fail TimeFun fix_fn_result.
+
+TimeFunFails "E_WF" fix_fn_result.
+
+Definition fix_fn_value (n : nat) : nat -> nat :=
+  Fix (well_founded_ltof nat (fun k => k)) (fun _ => nat -> nat) (fun _ _ m => m) n.
+
+Fail TimeFun fix_fn_value.
+
+TimeFunFails "E_WF" fix_fn_value.
 
 (** * Opaque constants *)
 

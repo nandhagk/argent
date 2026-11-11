@@ -325,13 +325,43 @@ head-call H As C :- unfold-head H Bo, !, coq.mk-app Bo As T, cost T C.
 head-call H As C :-
   head-type H HTy, binder-shapes HTy HSs, std.length As N,
   (take-exact N HSs Ks, ! ;
-   err "E_OVERAPP" {calc ("over-application of " ^ {tstr H} ^ ": its type has fewer " ^
-     "binders than arguments, and the result of a polymorphic function cannot be called")}),
+   overapp H),
   (std.length HSs N, ! ;
    err "E_CLOSURE" {calc ("partial application of " ^ {tstr H} ^ " in a value position")}),
-  check-constructor H Ks,
+  check-constructor H Ks, check-wf H HTy Ks As,
   args HTy Ks As CA As2,
   call H Ks As2 CC, plus CA CC C.
+
+% A call with more arguments than the callee's type has binders.  Well-founded recursion whose
+% result is a function gets its own message.
+pred overapp i:term.
+overapp H :- head-gref H GR, coq.gref->id GR Id, wf-name Id, !,
+  err "E_WF" {calc ("well-founded recursion through " ^ {tstr H} ^ " returns a function, " ^
+    "which is then called; only a result type that is not a function is supported")}.
+overapp H :- err "E_OVERAPP" {calc ("over-application of " ^ {tstr H} ^ ": its type has " ^
+  "fewer binders than arguments, and the result of a polymorphic function cannot be called")}.
+
+% Well-founded recursion whose result type is instantiated to a function: the functional returns
+% a function where the generic type of the recursor has data, so it is rejected here with a
+% message that names the cause.
+pred check-wf i:term, i:term, i:list shape, i:list term.
+check-wf H HTy Ks As :- head-gref H GR, coq.gref->id GR Id, wf-name Id, !, wf-args H HTy Ks As.
+check-wf _ _ _ _.
+
+pred wf-args i:term, i:term, i:list shape, i:list term.
+wf-args _ _ [] [] :- !.
+wf-args H HTy [S|Ss] [A|As] :- wh HTy (prod _ D B), wf-arg H S D, wf-args H (B A) Ss As.
+
+pred wf-arg i:term, i:shape, i:term.
+wf-arg H (sh-fn Sub) D :- returns-fn Sub D, !,
+  err "E_WF" {calc ("well-founded recursion through " ^ {tstr H} ^ " has a result type " ^
+    "that is a function; only a result type that is not a function is supported")}.
+wf-arg _ _ _.
+
+% [returns-fn Ss D]: after the binders with shapes Ss, the type D is still a function type.
+pred returns-fn i:list shape, i:term.
+returns-fn [] D :- not (irr D), wh D (prod _ _ _).
+returns-fn [_|Ss] D :- wh D (prod N T B), pi x\ decl x N T => returns-fn Ss (B x).
 
 pred head-type i:term, o:term.
 head-type H Ty :- coq.typecheck H Ty ok, !.
@@ -382,8 +412,13 @@ no-time H :- head-gref H (const C), coq.env.section-variables Vs, std.mem! Vs C,
   err "E_SECTION" {calc ("call of the section variable " ^ {tstr H} ^
     "; make it a functor parameter or run TimeFun after the section is closed")}.
 no-time H :- head-gref H GR, coq.gref->id GR Id, wf-name Id, !,
-  err "E_WF" {calc ("well-founded recursion through " ^ {tstr H} ^
-    " is not supported; use Argent.Loop.loop or loop_fuel")}.
+  err "E_WF" {calc ("well-founded recursion through " ^ {tstr H} ^ " has no time function; " ^
+    "write it with Fix, Fix_F or well_founded_induction_type, whose time functions Argent.Std " ^
+    "derives, or with Argent.Loop.loop or loop_fuel")}.
+no-time H :- head-gref H GR, coq.gref->id GR Id, rex.match ".*_terminate$" Id, !,
+  err "E_WF" {calc ("no time function for " ^ {tstr H} ^ ", which looks like the termination " ^
+    "term of a definition by Function; write the definition with Fix, Fix_F or " ^
+    "well_founded_induction_type, or with Argent.Loop.loop or loop_fuel")}.
 no-time H :- head-gref H (const C), coq.env.const C none _, !,
   err "E_NO_TIME" {calc ("no time function for " ^ {tstr H} ^
     ", which has no body; declare its cost with TimePrim" ^ {functor-hint})}.
@@ -439,8 +474,8 @@ partial-app H As Ss D C F :- unfold-head H Bo, !, coq.mk-app Bo As T, fntime T S
 partial-app H As Ss D C F :-
   head-type H HTy, binder-shapes HTy HSs, std.length As N,
   (take-exact N HSs Ks, ! ;
-   err "E_OVERAPP" {calc ("over-application of " ^ {tstr H})}),
-  check-constructor H Ks,
+   overapp H),
+  check-constructor H Ks, check-wf H HTy Ks As,
   args HTy Ks As C _,
   partial-body H As K,
   eta Ss D [] [] K F.
@@ -453,7 +488,7 @@ partial-body H As (xs\ _\ r\ full-call H As xs r).
 pred full-call i:term, i:list term, i:list term, o:term.
 full-call H As Xs R :-
   std.append As Xs All, head-type H HTy, binder-shapes HTy HSs, std.length All N,
-  (take-exact N HSs Ks, ! ; err "E_OVERAPP" {calc ("over-application of " ^ {tstr H})}),
+  (take-exact N HSs Ks, ! ; overapp H),
   args HTy Ks All _ As2, call H Ks As2 R.
 
 pred lam-body i:term, i:list term, i:list term, o:term.
@@ -705,6 +740,20 @@ pred section-kind i:shape, o:string.
 section-kind (sh-fn _) "function-typed" :- !.
 section-kind _ "data".
 
+% A definition that uses a well-founded recursor without a time function, such as the Fix_sub
+% that Program Fixpoint generates, is rejected before translation with a message that says how
+% to write it.
+pred check-wf-deps i:constant.
+check-wf-deps C :- coq.env.const-body C (some Bo), coq.env.term-dependencies Bo Deps,
+  coq.gref.set.elements Deps L, std.mem L G, untimed-wf G, !,
+  err "E_WF" {calc ({gstr (const C)} ^ " uses well-founded recursion through " ^ {gstr G} ^
+    ", which has no time function; write it with Fix, Fix_F or well_founded_induction_type, " ^
+    "whose time functions Argent.Std derives, or with Argent.Loop.loop or loop_fuel")}.
+check-wf-deps _.
+
+pred untimed-wf i:gref.
+untimed-wf G :- coq.gref->id G Id, wf-name Id, not (lookup G _), not (prim G _).
+
 % A time function lives beside its constant; for a constant of another module it lives in a
 % module named like the last component of that constant's path.
 pred check-placement i:gref.
@@ -760,7 +809,8 @@ with-companions [_|Ss] [I|Is] [I|Out] :- with-companions Ss Is Out.
 % time function, so that later arguments of the same command can see them.
 pred timefun i:string, o:list (pair gref gref).
 timefun S Ns :-
-  coq.locate S GR, check-code GR C, check-untimed GR, check-section C, check-placement GR,
+  coq.locate S GR, check-code GR C, check-untimed GR, check-section C, check-wf-deps C,
+  check-placement GR,
   derive GR Rs, std.forall Rs check-untimed-res, std.map Rs declare Ns.
 
 pred check-untimed-res i:result.
@@ -1014,7 +1064,8 @@ main [str Code, str S] :- !, coq.locate S GR, new_safe Safe,
 main _ :- coq.error "TimeFunFails: expected TimeFunFails \"E_CODE\" f".
 
 pred dry-run i:gref.
-dry-run GR :- check-code GR C, check-untimed GR, check-section C, check-placement GR,
+dry-run GR :- check-code GR C, check-untimed GR, check-section C, check-wf-deps C,
+  check-placement GR,
   derive GR Rs, std.forall Rs (r\ sigma G T Ty\ r = res G T, check-typed G T Ty).
 
 pred expect i:string, i:string, i:list string.

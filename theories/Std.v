@@ -1,8 +1,9 @@
 (** * Time functions of the standard library
 
     This file derives the time functions of the standard-library functions on lists, booleans,
-    pairs, [nat], [positive], [N] and [Z] that client code calls, and proves one bound for each
-    of the listed functions.  Each time function lives in a module named like the last
+    pairs, [nat], [positive], [N] and [Z] that client code calls, and of the well-founded
+    recursors [Fix_F], [Fix], [Acc_rect] and [well_founded_induction_type].  It proves a bound
+    for each of the listed functions on data and a potential lemma for each recursor.  Each time function lives in a module named like the last
     component of the path of its constant: [Datatypes.T_length], [List.T_rev], [Nat.T_add],
     [Pos.T_add], [N.T_add], [Z.T_add].
 
@@ -883,3 +884,78 @@ Proof.
 Qed.
 
 End Z.
+
+(** * Well-founded recursion
+
+    [Fix_F] recurses structurally on an accessibility proof, so [TimeFun] derives its time
+    function like any other.  The companion [T_F] of the functional takes the companion
+    [T_rec] of its recursive-call argument.  The proofs [Rwf x] and [Acc_inv a h] are
+    irrelevant and cost nothing. *)
+
+Module Wf.
+
+TimeFun Fix_F Fix Acc_rect Acc_rec well_founded_induction_type well_founded_induction.
+
+Section Bounds.
+
+Context {A : Type} {R : A -> A -> Prop} (P : A -> Type).
+
+(** The potential lemma of [Fix_F]: when one step of [F] pays its cost and its call from the
+    potential [Phi x], given that each recursive call on [y] costs [Phi y + 1] with the call of
+    its closure, the whole recursion costs at most [Phi x]. *)
+Lemma T_Fix_F_le (F : forall x, (forall y, R y x -> P y) -> P x)
+    (T_F : forall x, (forall y, R y x -> P y) -> (forall y, R y x -> nat) -> nat)
+    (Phi : A -> nat) :
+  (forall x rec T_rec,
+     (forall y h, T_rec y h <= Phi y + 1) -> T_F x rec T_rec + 1 <= Phi x) ->
+  forall x (a : Acc R x), T_Fix_F P F T_F a <= Phi x.
+Proof.
+  intros HF. fix IH 2. intros x [Hacc]. time_unfold @T_Fix_F. cbn [Acc_inv].
+  rewrite PeanoNat.Nat.add_comm. apply HF. intros y h. specialize (IH y (Hacc y h)). lia.
+Qed.
+
+(** The potential lemma of [Fix], which adds one call to that of [Fix_F]. *)
+Lemma T_Fix_le (Rwf : well_founded R) (F : forall x, (forall y, R y x -> P y) -> P x)
+    (T_F : forall x, (forall y, R y x -> P y) -> (forall y, R y x -> nat) -> nat)
+    (Phi : A -> nat) :
+  (forall x rec T_rec,
+     (forall y h, T_rec y h <= Phi y + 1) -> T_F x rec T_rec + 1 <= Phi x) ->
+  forall x, T_Fix Rwf P F T_F x <= Phi x + 1.
+Proof.
+  intros HF x. time_unfold @T_Fix. pose proof (T_Fix_F_le F T_F Phi HF x (Rwf x)). lia.
+Qed.
+
+(** The potential lemma of [Acc_rect], whose step also receives the accessibility proofs of
+    the smaller elements. *)
+Lemma T_Acc_rect_le
+    (f : forall x, (forall y, R y x -> Acc R y) -> (forall y, R y x -> P y) -> P x)
+    (T_f : forall x, (forall y, R y x -> Acc R y) -> (forall y, R y x -> P y) ->
+       (forall y, R y x -> nat) -> nat)
+    (Phi : A -> nat) :
+  (forall x acc rec T_rec,
+     (forall y h, T_rec y h <= Phi y + 1) -> T_f x acc rec T_rec + 1 <= Phi x) ->
+  forall x (a : Acc R x), T_Acc_rect P f T_f a <= Phi x.
+Proof.
+  intros Hf. fix IH 2. intros x [Hacc]. time_unfold @T_Acc_rect.
+  rewrite PeanoNat.Nat.add_comm. apply Hf. intros y h. specialize (IH y (Hacc y h)). lia.
+Qed.
+
+(** The potential lemma of [well_founded_induction_type], whose step passes through one more
+    closure than that of [Fix], so it must pay 2. *)
+Lemma T_well_founded_induction_type_le (Rwf : well_founded R)
+    (F : forall x, (forall y, R y x -> P y) -> P x)
+    (T_F : forall x, (forall y, R y x -> P y) -> (forall y, R y x -> nat) -> nat)
+    (Phi : A -> nat) :
+  (forall x rec T_rec,
+     (forall y h, T_rec y h <= Phi y + 1) -> T_F x rec T_rec + 2 <= Phi x) ->
+  forall x, T_well_founded_induction_type Rwf P F T_F x <= Phi x + 1.
+Proof.
+  intros HF x. time_unfold @T_well_founded_induction_type.
+  enough (T_Acc_rect P (fun x _ rec => F x rec) (fun x _ rec T_rec => 1 + T_F x rec T_rec)
+    (Rwf x) <= Phi x) by lia.
+  apply T_Acc_rect_le. intros y acc rec T_rec Hrec. specialize (HF y rec T_rec Hrec). lia.
+Qed.
+
+End Bounds.
+
+End Wf.

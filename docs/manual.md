@@ -128,7 +128,7 @@ code.
 | `E_NO_TIME` | A called function has no time function, including a closure taken out of data. |
 | `E_OVERAPP` | A call has more arguments than the callee's type has binders, for example a call of the result of a polymorphic function. |
 | `E_MATCH_FN` | A `match` returns a function. Eta-expand the match. |
-| `E_WF` | The definition uses well-founded recursion through `Fix`, `Fix_F` or `Acc_rect`. Use `loop` or `loop_fuel`. |
+| `E_WF` | The definition uses well-founded recursion through a recursor without a time function, such as the `Fix_sub` of `Program Fixpoint` or the termination term of `Function`, or its result type is a function. Use `Fix`, `loop` or `loop_fuel`. |
 | `E_OPAQUE` | The constant, or a callee, is opaque or has no body. |
 | `E_SECTION` | The definition uses a section variable. Run `TimeFun` after the section closes, or make the variable a functor parameter. |
 | `E_TERM` | The term has a form that the translation does not support. |
@@ -219,13 +219,50 @@ version is used twice, because repeating an expensive operation on the same vers
 paid for. A loop is bounded the same way. Its potential must strictly decrease by the cost of
 each step, because each iteration also costs one call.
 
+## Well-founded recursion
+
+`Argent.Std` derives the time functions of `Fix_F`, `Fix`, `Acc_rect` and
+`well_founded_induction_type`, so a definition written with one of them gets its time function
+from `TimeFun` like any other. `Fix_F` recurses structurally on the accessibility proof, and the
+proofs `Rwf x` and `Acc_inv a h` cost nothing. The companion `T_F` of the functional `F` takes
+the companion `T_rec` of its recursive-call argument, and each recursive call costs
+`1 + T_Fix_F … y _`, where the 1 is the call of the closure that `Fix_F` passes to `F`.
+
+```coq
+Definition log2 (x : N) : nat :=
+  Fix (Acc_intro_generator 64 N.lt_wf_0) (fun _ => nat) log2_step x.
+
+TimeFun log2_step log2.
+```
+
+A bound comes from a potential `Phi`. `Wf.T_Fix_le` says that `T_Fix Rwf P F T_F x <= Phi x + 1`
+when every step satisfies `T_F x rec T_rec + 1 <= Phi x` for every `rec` and every `T_rec` with
+`T_rec y h <= Phi y + 1`. `Wf.T_Fix_F_le`, `Wf.T_Acc_rect_le` and
+`Wf.T_well_founded_induction_type_le` state the same for the other recursors. The step
+`log2_step` takes its proof of decrease from the equation of a convoy match, and
+`examples/Halving.v` proves the bounds of `log2` and of a divide-and-conquer function this way.
+
+The result type `P x` must not be a function type. `TimeFun` rejects such a definition with
+`E_WF`. It also rejects `Program Fixpoint`, which goes through `Fix_sub`, and `Function`, whose
+termination term builds its result and a proof in nested convoy matches.
+
+A `Fix` over a well-foundedness proof that ends in `Qed`, such as `N.lt_wf_0`, does not compute
+under `vm_compute`, because the accessibility proof never reduces to a constructor. Wrapping the
+proof in `Acc_intro_generator n`, which adds `2 ^ n` constructors in front of it lazily, makes the
+function compute, as `log2` and the loop over `Acc` do. Extraction erases the proof, so the
+extracted `log2` is `let rec log2 x = log2_step x (fun y _ -> log2 y)`.
+
 ## Limits
 
 - The translator is trusted. It is an unverified Elpi program, and `TimeCheck` checks only that
   a stored time function is what the translator produces.
 - `cofix` cannot be translated, because rocq-elpi does not read cofixpoints.
-- Well-founded recursion by `Fix`, `Program Fixpoint`, `Function` or Equations is rejected.
-  Use `loop` over an accessibility proof or `loop_fuel`.
+- Well-founded recursion is supported through `Fix`, `Fix_F`, `Acc_rect` and
+  `well_founded_induction_type`, for a result type that is not a function. `Program Fixpoint`,
+  `Function` and the recursors of two arguments, such as `Fix_F_2`, are rejected. Equations is
+  not packaged in the flake, so definitions by Equations are untested.
+  The bound lemmas quantify over every recursive-call function, so a step whose cost depends on
+  the results of its recursive calls needs a bound proved by hand.
 - Closures cannot be stored in data. A record of functions becomes a functor parameter.
 - A definition whose body returns a function, such as `Pos.compare := Pos.compare_cont Eq`, is
   eta-expanded, so its partial applications pay the cost of creating the closure at every call.
