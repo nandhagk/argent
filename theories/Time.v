@@ -696,9 +696,18 @@ check-untimed-res (res GR _) :- check-untimed GR.
 % ---------------------------------------------------------------------------------------------
 % Checking and bounds
 
+% [owner GR TGR G0]: the constant beside the time function TGR with the name of GR.  A module
+% alias such as the parameter of a functor instance names the same constant as G0, but Elpi
+% reads its body as a call of G0.
+pred owner i:gref, i:gref, o:gref.
+owner GR TGR G0 :- coq.gref->path TGR P, coq.gref->id GR Id, std.append P [Id] L,
+  std.string.concat "." L S, coq.locate-all S Locs, std.mem Locs (loc-gref G0),
+  coq.gref->path G0 P, !.
+owner GR _ GR.
+
 pred timecheck i:gref.
 timecheck GR :- lookup GR (const TC), coq.env.const-body TC (some Old), !,
-  derive GR Rs, std.mem Rs (res GR New), !,
+  owner GR (const TC) G0, derive G0 Rs, std.mem Rs (res G0 New), !,
   (coq.unify-eq Old New ok, ! ;
    err "E_CHECK" {calc ("TimeCheck: the stored time function of " ^ {gstr GR} ^
      " differs from the derived one")}).
