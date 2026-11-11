@@ -41,9 +41,9 @@ Theorem T_loop_le {S R : Type} (lt : S -> S -> Prop)
   forall s (H : Acc lt s), Inv s -> T_loop lt step T_step s H <= Phi s + Tstop + 1.
 Proof.
   intros Hgo Hstop s H. induction H as [s Hacc IH] using Acc_ind_dep. intros Hinv.
-  cbn [T_loop]. destruct (step s) as [[s1 Hlt] | r] eqn:Hstep.
+  time_unfold @T_loop. cbn [Acc_inv]. destruct (step s) as [[s1 Hlt] | r] eqn:Hstep.
   - destruct (Hgo s s1 Hlt Hinv Hstep) as [Hinv1 Hdec].
-    specialize (IH s1 Hlt Hinv1). cbn [Acc_inv]. lia.
+    specialize (IH s1 Hlt Hinv1). lia.
   - specialize (Hstop s r Hinv Hstep). lia.
 Qed.
 
@@ -70,7 +70,8 @@ Theorem T_loop_fuel_le {St R : Type} (step : St -> St + R) (T_step : St -> nat)
   (forall s r, Inv s -> step s = inr r -> T_step s <= Tstop) ->
   forall fuel s, Inv s -> T_loop_fuel step T_step fuel s <= Phi s + Tstop + 1.
 Proof.
-  intros Hgo Hstop fuel. induction fuel as [| fuel IH]; intros s Hinv; cbn [T_loop_fuel].
+  intros Hgo Hstop fuel. induction fuel as [| fuel IH]; intros s Hinv;
+    time_unfold @T_loop_fuel.
   - lia.
   - destruct (step s) as [s1 | r] eqn:Hstep.
     + destruct (Hgo s s1 Hinv Hstep) as [Hinv1 Hdec]. specialize (IH s1 Hinv1). lia.

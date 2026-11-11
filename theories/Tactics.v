@@ -20,9 +20,6 @@ Create HintDb time_inv.
 
 (** * Constant time functions *)
 
-(** Replace the goal by the convertible type [t]. *)
-Ltac time_change t := change t.
-
 Elpi Tactic time_consts.
 Elpi Accumulate Db argent.time.db.
 Elpi Accumulate File argent.time.lib.
@@ -147,34 +144,39 @@ Ltac time_cases :=
     | |- context [match ?e with _ => _ end] => destruct e
     end.
 
-(** Unfold [tf] once, simplify, compute the calls whose arguments are constructors, pose the
-    callee bounds and try [nia], first as is and then after case analysis on the remaining
-    matches. *)
-Ltac time_step_with tf :=
-  cbn [tf]; time_simpl; cbn; elpi time_pose; try nia;
-  try (time_cases; elpi time_pose; nia).
+(** On the goal [t], which unfolds one time function of the original goal by one step: simplify,
+    compute the specification functions, pose the callee bounds and try [nia], first as is and
+    then after case analysis on the remaining matches. *)
+Ltac time_step_rest t :=
+  time_change t; time_simpl; cbn; elpi time_pose; cbn in *; try nia;
+  try (time_cases; elpi time_pose; cbn in *; nia).
 
 Elpi Tactic time_step.
 Elpi Accumulate Db argent.time.db.
 Elpi Accumulate File argent.time.lib.
+Elpi Accumulate File argent.time.unfold.
 Elpi Accumulate lp:{{
 % The first time function applied in the left-hand side of the goal.
-pred first-time i:term, o:term.
-first-time (app [H|_]) H :- head-gref H G, coq.gref->id G Id, rex.match "^T_" Id, !.
-first-time (app L) H :- std.mem L X, first-time X H, !.
+pred first-time i:term, o:gref.
+first-time (app [H|_]) G :- head-gref H G, coq.gref->id G Id, rex.match "^T_" Id, !.
+first-time (app L) G :- std.mem L X, first-time X G, !.
+
+pred step i:gref, i:goal, o:list sealed-goal.
+step TG (goal _ _ Ty _ _ as G) GL :- unfold-heads [TG] Ty Ty2,
+  coq.ltac.call "time_step_rest" [trm Ty2] G GL.
 
 solve (goal _ _ _ _ [trm F] as G) GL :- !, head-gref F GR,
-  (lookup GR TGR, ! ; coq.ltac.fail _ "time_step: no time function for" {coq.term->string F}),
-  coq.env.global TGR TF, coq.ltac.call "time_step_with" [trm TF] G GL.
+  (lookup GR TG, ! ; coq.ltac.fail _ "time_step: no time function for" {coq.term->string F}),
+  step TG G GL.
 solve (goal _ _ Ty _ [] as G) GL :-
-  coq.locate "le" (indt Le), Ty = app [global (indt Le), L, _],
-  (first-time L TF, ! ; coq.ltac.fail _ "time_step: no time function in the left-hand side"),
-  coq.ltac.call "time_step_with" [trm TF] G GL.
+  coq.locate "le" (indt Le), Ty = app [global (indt Le), L, _], !,
+  (first-time L TG, ! ; coq.ltac.fail _ "time_step: no time function in the left-hand side"),
+  step TG G GL.
 solve _ _ :- coq.ltac.fail _ "time_step: the goal must have the form T_f args <= bound".
 }}.
 
-(** Unfold the time function on the left of a goal [T_f a <= e], or the time function of the
-    given [f], then simplify, pose the callee bounds and try [nia]. *)
+(** Unfold by one step the time function on the left of a goal [T_f a <= e], or the time
+    function of the given [f]; then simplify, pose the callee bounds and try [nia]. *)
 Tactic Notation "time_step" := elpi time_step.
 Tactic Notation "time_step" constr(f) := elpi time_step ltac_term:(f).
 

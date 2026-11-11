@@ -656,6 +656,7 @@ declare (res GR TBo) (pr GR (const TC)) :-
   check-typed GR TBo Ty, coq.gref->id GR Id, TId is "T_" ^ Id,
   add-time-const GR TId TBo Ty TC,
   copy-implicits GR (const TC),
+  (@global! => coq.arguments.set-simplification (const TC) never),
   @global! => coq.elpi.accumulate execution-site "argent.time.db"
     (clause _ _ (timed GR (const TC))).
 
@@ -663,6 +664,10 @@ pred add-time-const i:gref, i:id, i:term, i:term, o:constant.
 add-time-const GR TId TBo Ty TC :- coq.env.univpoly? GR _, !,
   @univpoly! => coq.env.add-const TId TBo Ty @transparent! TC.
 add-time-const _ TId TBo Ty TC :- coq.env.add-const TId TBo Ty @transparent! TC.
+
+% A time function never unfolds under cbn and simpl, so that a plain cbn in a proof computes the
+% specification functions and leaves every callee time function folded, where its bound applies.
+% The tactics time_unfold and time_step unfold time functions one step at a time.
 
 % T_f copies the implicit status of f, and every companion is explicit.
 pred copy-implicits i:gref, i:gref.
@@ -878,3 +883,91 @@ expect Code S [] :- coq.error "TimeFunFails:" S "is accepted, expected" Code.
 }}.
 
 Elpi Export TimeFunFails.
+
+(** * Unfolding time functions
+
+    [unfold-once T R] unfolds an application of a time function by one step and refolds its
+    recursive calls into the time function itself, then reduces beta and iota redexes.  The
+    tactics [time_unfold] and [time_step] use it in place of [cbn], which never unfolds a time
+    function. *)
+
+Elpi File argent.time.unfold lp:{{
+
+pred unfold-once i:term, o:term.
+unfold-once (app [H|As]) R :- head-gref H (const C), const-body-at H C Bo, !,
+  unfold-body H [] Bo As R.
+unfold-once H R :- head-gref H (const C), const-body-at H C Bo, unfold-body H [] Bo [] R.
+
+pred unfold-body i:term, i:list term, i:term, i:list term, o:term.
+unfold-body H Ps (fun _ _ B) [A|As] R :- !, unfold-body H {std.append Ps [A]} (B A) As R.
+unfold-body H Ps (fix _ I _ B) As R :- !, constructor-at I As, coq.mk-app H Ps HP,
+  coq.mk-app (B HP) As R0, betaiota R0 R.
+unfold-body H Ps (mfix J I Blk) As R :- !, constructor-at I As, member-values H Ps Blk Vs,
+  block-body Blk Vs J BJ, coq.mk-app BJ As R0, betaiota R0 R.
+unfold-body _ _ Bo As R :- coq.mk-app Bo As R0, betaiota R0 R.
+
+% A recursive function unfolds by conversion only when its structural argument is a
+% constructor.
+pred constructor-at i:int, i:list term.
+constructor-at I As :- std.length As N, I < N, std.nth I As A, coq.reduction.lazy.whd A W,
+  constructor-head W.
+
+pred constructor-head i:term.
+constructor-head (global (indc _)).
+constructor-head (pglobal (indc _) _).
+constructor-head (app [H|_]) :- constructor-head H.
+
+pred betaiota i:term, o:term.
+betaiota T R :- @redflags! coq.redflags.betaiotazeta => coq.reduction.lazy.norm T R.
+
+% The members of a mutual time function, each refolded to its sibling constant when there is
+% one, or else kept as the closed fix term.
+pred member-values i:term, i:list term, i:mfix-block, o:list term.
+member-values H Ps Blk Vs :- block-names Blk Ns Rs, head-gref H GR, coq.gref->path GR P,
+  member-values-from P Ps Blk 0 Ns Rs Vs.
+
+pred member-values-from i:list string, i:list term, i:mfix-block, i:int, i:list name,
+  i:list int, o:list term.
+member-values-from _ _ _ _ [] [] [] :- !.
+member-values-from P Ps Blk K [N|Ns] [R|Rs] [V|Vs] :-
+  member-value P Ps Blk K N R V, K1 is K + 1, member-values-from P Ps Blk K1 Ns Rs Vs.
+
+pred member-value i:list string, i:list term, i:mfix-block, i:int, i:name, i:int, o:term.
+member-value P Ps _ _ N _ V :- coq.name->id N Id, std.append P [Id] L,
+  std.string.concat "." L S, coq.locate-all S Locs, std.mem Locs (loc-gref G),
+  coq.gref->path G P, !, coq.env.global G GT, coq.mk-app GT Ps V.
+member-value _ _ Blk K _ R (mfix K R Blk).
+
+pred block-body i:mfix-block, i:list term, i:int, o:term.
+block-body (mfix-ty _ _ _ B) [V|Vs] J R :- !, block-body (B V) Vs J R.
+block-body (mfix-bo Bs) [] J R :- std.nth J Bs R.
+
+% [unfold-heads Gs T R]: unfold by one step every application in T of a constant in Gs.
+pred unfold-heads i:list gref, i:term, o:term.
+unfold-heads Gs T R :-
+  ((pi h xs r\ copy (app [h|xs]) r :- head-gref h G, std.mem! Gs G,
+     unfold-once (app [h|xs]) r, !) =>
+   (pi h r\ copy h r :- head-gref h G, std.mem! Gs G, unfold-once h r, !) => copy T R).
+
+}}.
+
+(** Replace the goal by the convertible type [t]. *)
+Ltac time_change t := change t.
+
+Elpi Tactic time_unfold.
+Elpi Accumulate Db argent.time.db.
+Elpi Accumulate File argent.time.lib.
+Elpi Accumulate File argent.time.unfold.
+Elpi Accumulate lp:{{
+pred arg-gref i:argument, o:gref.
+arg-gref (trm T) G :- head-gref T G, !.
+arg-gref A _ :- coq.ltac.fail _ "time_unfold: expected time functions, got" A.
+
+solve (goal _ _ Ty _ Args as G) GL :- std.map Args arg-gref Gs,
+  unfold-heads Gs Ty Ty2, coq.ltac.call "time_change" [trm Ty2] G GL.
+}}.
+
+(** Unfold by one step every application of the time function [t] in the goal whose
+    structural argument is a constructor.  A time function never unfolds under [cbn] or
+    [simpl]. *)
+Tactic Notation "time_unfold" constr(t) := elpi time_unfold ltac_term:(t).
