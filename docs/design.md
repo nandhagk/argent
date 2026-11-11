@@ -246,9 +246,11 @@ The commands give a project the following checks.
 - Keep clients to the contracts of a signature, by rejecting `unfold M.T_op` outside the module
   that defines `T_op`.
 
-`TimeAudit` does not compare the `TimePrim` table with the constants that extraction realises
-natively, because rocq-elpi gives no access to the extraction tables. A project that maps
-constants natively must check by review that the two sets agree. Argent ships no lint.
+rocq-elpi gives no access to the extraction tables, so no command reads the constants that
+extraction realises natively. `TimePrimTable c …` fails unless the constants with a `TimePrim`
+cost are exactly `c …`, so a project runs it on the constants of its `Extract Constant`
+directives, and the test fails when a cost is declared or removed without the matching
+directive. Argent ships no lint.
 
 ## 6. Limits
 

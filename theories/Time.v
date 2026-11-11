@@ -24,7 +24,7 @@ From elpi Require Import elpi.
 
 Elpi Db argent.time.db lp:{{
 pred timed i:gref, o:gref.
-pred prim i:gref, o:term.
+pred prim o:gref, o:term.
 pred unfold-const i:gref.
 pred bound i:gref, o:gref.
 pred verified i:gref.
@@ -903,6 +903,55 @@ declare-prim GR E :-
 }}.
 
 Elpi Export TimePrim.
+
+(** [TimePrimTable] prints every cost declared with [TimePrim], sorted by the full name of its
+    constant.  [TimePrimTable c ...] also fails unless the constants with a declared cost are
+    exactly [c ...], so that a test can compare the table with the constants that extraction
+    realises natively. *)
+
+Elpi Command TimePrimTable.
+Elpi Accumulate Db argent.time.db.
+Elpi Accumulate File argent.time.lib.
+Elpi Accumulate lp:{{
+main Args :- std.findall (prim G_ E_) Facts, std.map Facts to-entry Entries,
+  sort Entries Sorted, std.forall Sorted print-entry, expect-names Args Sorted.
+
+kind entry type.
+type ent string -> term -> entry.
+
+pred to-entry i:prop, o:entry.
+to-entry (prim GR E) (ent S E) :- gstr GR S.
+
+pred print-entry i:entry.
+print-entry (ent S E) :- coq.say S ":=" {tstr E}.
+
+% Insertion sort by name.
+pred sort i:list entry, o:list entry.
+sort [] [].
+sort [X|Xs] Ys :- sort Xs Zs, insert X Zs Ys.
+
+pred insert i:entry, i:list entry, o:list entry.
+insert X [] [X].
+insert (ent S E) [ent T F|Ys] [ent S E, ent T F|Ys] :- S =< T, !.
+insert X [Y|Ys] [Y|Zs] :- insert X Ys Zs.
+
+pred expect-names i:list argument, i:list entry.
+expect-names [] _ :- !.
+expect-names Args Sorted :- std.map Args arg-name Names,
+  std.map Names (n\ e\ e = ent n {{ 0 }}) Es, sort Es SortedEs,
+  std.map SortedEs entry-name Want, std.map Sorted entry-name Have,
+  (Want = Have, ! ;
+   coq.error "TimePrimTable: the constants with a declared cost are" Have "and not" Want).
+
+pred arg-name i:argument, o:string.
+arg-name (str S) N :- !, coq.locate S GR, gstr GR N.
+arg-name A _ :- coq.error "TimePrimTable: expected constant names, got" A.
+
+pred entry-name i:entry, o:string.
+entry-name (ent S _) S.
+}}.
+
+Elpi Export TimePrimTable.
 
 (** [TimeUnfold c] makes the translation unfold [c] before translating its calls, so that, for
     example, an identity-monad [bind m (fun x => k)] is charged as [let x := m in k]. *)

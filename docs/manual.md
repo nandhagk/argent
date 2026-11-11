@@ -84,6 +84,17 @@ by hand, so its uses are the place to review.
 TimePrim opaque_double := (fun n => n + 1).
 ```
 
+`TimePrimTable` prints every cost declared with `TimePrim`, sorted by the full name of its
+constant. `TimePrimTable c …` also fails unless the constants with a declared cost are exactly
+`c …`. A project that realises constants natively runs it in a test on the constants of its
+`Extract Constant` directives, so that the test fails when a cost is declared or removed without
+the matching directive. The test compares two lists kept by hand, because no command reads the
+extraction tables.
+
+```coq
+TimePrimTable opaque_double opaque_triple.
+```
+
 `TimeUnfold c …` makes the translation unfold `c` at every call before translating it. A
 beta-redex `(fun x => k) m` is charged as `let x := m in k`. Code written in an identity monad
 therefore costs what the same code written with `let` costs.
@@ -218,8 +229,9 @@ each step, because each iteration also costs one call.
   This overestimates the cost of a reused partial application by a constant per call.
 - A closure that a beta-redex or `TimeUnfold` substitutes is not charged the 1 of its call. A
   let-bound closure is charged it. Both are within the constant factor of the model.
-- `TimeAudit` does not compare the `TimePrim` table with the constants that extraction realises
-  natively.
+- rocq-elpi gives no access to the extraction tables, so no command reads the constants that
+  extraction realises natively. A project compares them with the costs declared by `TimePrim` in
+  a test that runs `TimePrimTable` on the constants of its `Extract Constant` directives.
 - Database facts that a command records inside a functor are dropped when the functor ends.
   So `TimePrim`, `TimeUnfold`, `TimeBound` and `TimeFun` for a constant of another library
   belong outside functors. rocq-elpi gives no way to tell that a command runs inside a functor,

@@ -267,3 +267,18 @@ TimeUnfold wrap.
 Fail TimeCheck use_wrap.
 
 Fail TimeAudit use_wrap.
+
+(** * The table of built-in costs
+
+    [TimePrimTable] prints the costs declared with [TimePrim] and fails unless the constants with
+    a declared cost are exactly the given ones, here the two of this file. *)
+Definition opaque_triple (n : nat) : nat.
+Proof.
+  exact (n + n + n).
+Qed.
+
+TimePrim opaque_triple := 3.
+
+TimePrimTable opaque_double opaque_triple.
+
+Fail TimePrimTable opaque_double.
