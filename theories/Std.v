@@ -781,10 +781,8 @@ Qed.
 
 Lemma T_shiftr_le (a n : Z) : T_shiftr a n <= (size_nat a + 5) * Z.abs_nat n + 3.
 Proof.
-  time_unfold T_shiftr. pose proof (T_opp_le n). pose proof (T_shiftl_le a (- n)).
-  destruct n; cbn [Z.opp Z.abs_nat] in *; lia.
+  destruct n; time_step.
 Qed.
-
 
 (** * Division *)
 
@@ -868,21 +866,20 @@ Qed.
 Lemma T_div_le (a b : Z) :
   T_div a b <= 16 * (size_nat a + 1) * (size_nat a + size_nat b + 2) + 1.
 Proof.
-  pose proof (T_div_eucl_le a b). time_unfold T_div. lia.
+  time_step.
 Qed.
 
 Lemma T_modulo_le (a b : Z) :
   T_modulo a b <= 16 * (size_nat a + 1) * (size_nat a + size_nat b + 2) + 1.
 Proof.
-  pose proof (T_div_eucl_le a b). time_unfold T_modulo. lia.
+  time_step.
 Qed.
 
 (** [Z.gcd] runs [Pos.gcd] on the absolute values, so it is quadratic. *)
 Lemma T_gcd_le (a b : Z) :
   T_gcd a b <= (size_nat a + size_nat b + 2) * (2 * (size_nat a + size_nat b) + 3) + 2.
 Proof.
-  destruct a as [| a | a], b as [| b | b]; time_unfold T_gcd; time_pose; cbn [size_nat] in *;
-    try pose proof (Pos.T_gcd_le a b); lia.
+  destruct a, b; time_step.
 Qed.
 
 End Z.
