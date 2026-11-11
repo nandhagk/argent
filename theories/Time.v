@@ -651,8 +651,8 @@ check-typed GR TBo _ :- coq.typecheck TBo _ (error Msg), !,
   err "E_ILLTYPED" {calc ("the time function of " ^ {gstr GR} ^ " is ill-typed: " ^ Msg ^
     "; a function was probably passed where a polymorphic callee expects data")}.
 
-pred declare i:result.
-declare (res GR TBo) :-
+pred declare i:result, o:pair gref gref.
+declare (res GR TBo) (pr GR (const TC)) :-
   check-typed GR TBo Ty, coq.gref->id GR Id, TId is "T_" ^ Id,
   add-time-const GR TId TBo Ty TC,
   copy-implicits GR (const TC),
@@ -677,10 +677,12 @@ with-companions [S|Ss] [] Out :- !, with-companions [S|Ss] [explicit] Out.
 with-companions [sh-fn _|Ss] [I|Is] [I, explicit|Out] :- !, with-companions Ss Is Out.
 with-companions [_|Ss] [I|Is] [I|Out] :- with-companions Ss Is Out.
 
-pred timefun i:string.
-timefun S :-
+% [timefun S Ns]: derive and declare the time functions; Ns pairs each constant with its new
+% time function, so that later arguments of the same command can see them.
+pred timefun i:string, o:list (pair gref gref).
+timefun S Ns :-
   coq.locate S GR, check-code GR C, check-untimed GR, check-section C, check-placement GR,
-  derive GR Rs, std.forall Rs check-untimed-res, std.forall Rs declare.
+  derive GR Rs, std.forall Rs check-untimed-res, std.map Rs declare Ns.
 
 pred check-untimed-res i:result.
 check-untimed-res (res GR _) :- check-untimed GR.
@@ -719,11 +721,16 @@ Elpi Command TimeFun.
 Elpi Accumulate Db argent.time.db.
 Elpi Accumulate File argent.time.lib.
 Elpi Accumulate lp:{{
-main Args :- std.forall Args time-arg.
+main Args :- time-args Args.
 
-pred time-arg i:argument.
-time-arg (str S) :- !, timefun S.
-time-arg A :- coq.error "TimeFun: expected constant names, got" A.
+pred time-args i:list argument.
+time-args [] :- !.
+time-args [str S|As] :- !, timefun S Ns, with-timed Ns As.
+time-args [A|_] :- coq.error "TimeFun: expected constant names, got" A.
+
+pred with-timed i:list (pair gref gref), i:list argument.
+with-timed [] As :- time-args As.
+with-timed [pr G T|Ns] As :- timed G T => with-timed Ns As.
 }}.
 
 Elpi Export TimeFun.

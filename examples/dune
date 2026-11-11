@@ -1,0 +1,4 @@
+(rocq.theory
+ (name Argent.Examples)
+ (flags :standard -w +default)
+ (theories Stdlib elpi elpi_elpi Argent))
