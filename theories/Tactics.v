@@ -197,8 +197,9 @@ Ltac loop_bound Inv Phi Tstop :=
   | try lia ].
 
 (** On a goal [total op T os s <= e], apply [amortised_uniform] with the invariant [Inv], the
-    potential [Phi] and the amortised cost [A].  It leaves [amortised], the cap [A o s <= k]
-    and [Inv s], and tries [lia] on the remaining arithmetic. *)
-Ltac amortise Inv Phi A :=
+    potential [Phi], the amortised cost [A] and its cap [k].  It leaves [amortised], the cap
+    [A o s <= k], [Inv s] and the arithmetic goal [k * length os + Phi s <= e], after trying
+    [lia] on the last. *)
+Ltac amortise Inv Phi A k :=
   eapply PeanoNat.Nat.le_trans;
-  [ eapply (amortised_uniform _ _ A Phi Inv) | try lia ].
+  [ eapply (amortised_uniform _ _ A Phi Inv k) | try lia ].
