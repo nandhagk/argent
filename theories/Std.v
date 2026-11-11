@@ -3,9 +3,10 @@
     This file derives the time functions of the standard-library functions on lists, booleans,
     pairs, [nat], [positive], [N] and [Z] that client code calls, and of the well-founded
     recursors [Fix_F], [Fix], [Acc_rect] and [well_founded_induction_type].  It proves a bound
-    for each of the listed functions on data and a potential lemma for each recursor.  Each time function lives in a module named like the last
-    component of the path of its constant: [Datatypes.T_length], [List.T_rev], [Nat.T_add],
-    [Pos.T_add], [N.T_add], [Z.T_add].
+    for each of the listed functions on data and a potential lemma for each recursor.  Each
+    time function lives in a module named like the last component of the path of its constant:
+    [Datatypes.T_length], [List.T_rev], [Nat.T_add], [Pos.T_add], [N.T_add], [Z.T_add],
+    [Wf.T_Fix].
 
     Bounds are stated in the natural size of the arguments, the length of a list or the bit
     length [Pos.size_nat] of a number, with explicit constants.  The model is the extracted

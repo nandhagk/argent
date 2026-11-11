@@ -33,20 +33,24 @@ Qed.
 The library has the following theories, under the logical name `Argent`.
 
 - `Time` holds the translator and the commands `TimeFun`, `TimeCheck`, `TimeAudit`,
-  `TimePrim`, `TimeUnfold` and `TimeBound`.
+  `TimePrim`, `TimePrimTable`, `TimeUnfold` and `TimeBound`.
 - `BigO` defines `bigO` and `tight` with their closure lemmas.
 - `Amortised` proves the potential method for sequences of operations.
 - `Loop` defines a loop over an accessibility proof and a loop with fuel, each with a potential
   lemma that bounds its time independently of the proof and the fuel.
 - `Std` derives the time functions of the standard-library functions on lists, booleans, pairs,
-  `nat`, `positive`, `N` and `Z`, with a bound for each of the common ones.
+  `nat`, `positive`, `N` and `Z`, with a bound for each of the common ones, including division,
+  gcd, shifts and the bitwise operations on `Z`. It also derives the time functions of the
+  well-founded recursors `Fix_F`, `Fix`, `Acc_rect` and `well_founded_induction_type`, with a
+  potential lemma for each.
 - `Tactics` holds `time_pose`, `time_simpl`, `time_step`, `loop_bound` and `amortise`.
 
 The directory `examples` (`Argent.Examples`) holds a binary trie with a tight bound, a two-list
 queue with an amortised bound, maps over abstract keys with a client functor that uses only the
-signature's contracts, and two loops. The directory `tests` (`Argent.Tests`) checks every
-feature of the command, every rejection, the tactics, the assumptions of the example theorems
-and the extraction of the loop.
+signature's contracts, two loops, and two functions defined by `Fix` and bounded through the
+potential lemma of `Fix`. The directory `tests` (`Argent.Tests`) checks every feature of the command,
+every rejection, the tactics, the bounds of `Std`, the assumptions of the example theorems and
+the extraction of the loop and of a function defined by `Fix`.
 
 `docs/manual.md` explains how to use the library, and `docs/design.md` records the design, the
 translation rules and their meta-theory.

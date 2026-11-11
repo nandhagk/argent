@@ -4,7 +4,7 @@ Argent derives a time function `T_f` from the body of a Gallina definition `f`, 
 the lemmas and tactics to prove big-O bounds on it, including amortised ones. Programs stay
 plain Gallina, and no cost annotation appears in the code. This manual describes the cost
 model, the commands, the tactics, the convention for signatures, the recipe for amortised
-bounds and the limits of the library.
+bounds, well-founded recursion and the limits of the library.
 
 ## Cost model
 
@@ -107,8 +107,9 @@ TimeUnfold ret bind.
 ```
 
 `TimeBound L` registers a lemma `L : forall x̄, [P x̄ ->] T_g ā <= B` for `time_pose`. A lemma
-named `T_g_le` beside `T_g` is found without registration, which is the only way inside a
-functor, because Elpi databases cannot be extended there.
+named `T_g_le` beside `T_g` is found without registration. That is the only way for a bound
+proved inside a functor, because database facts recorded inside a functor are dropped when it
+ends.
 
 ```coq
 Lemma twice_bound (n : nat) : T_twice n <= n + 2.
@@ -151,9 +152,16 @@ folded.
   bound on a companion. It discharges premises with `assumption`, `lia` or
   `eauto with time_inv`.
 - `time_step` unfolds the time function on the left of a goal `T_f ā <= e` by one step, runs
-  `time_simpl` and `cbn`, poses the bounds, and tries `nia`. When `nia` fails, it destructs the
-  scrutinees of the matches left in the goal and tries again. `time_step f` names the function
-  `f` instead.
+  `time_simpl` and `cbn`, poses the bounds, and tries `time_lin` and then `nia`. When both fail,
+  it destructs the scrutinees of the matches left in the goal and tries again. `time_step f`
+  names the function `f` instead.
+- `time_lin` closes a goal that is linear over products by an abstract constant, such as
+  `c_map * (bits k + 1)` with `c_map` a `Parameter` of a signature. It distributes the products,
+  adds `c * a <= c * b` for each hypothesis `a <= b` and each such constant `c`, replaces the
+  products of terms that are not numerals by fresh variables, and calls `lia`. It runs only
+  when a constant multiplies a term, and it fails with the goal unchanged. In the bounds of
+  `Std` and of the examples that we tried, `nia` already closed every goal that `time_lin`
+  closes.
 - `loop_bound Inv Phi Tstop` applies the potential lemma of `loop` or `loop_fuel`.
 - `amortise Inv Phi A k` applies `amortised_uniform`.
 
@@ -256,24 +264,27 @@ extracted `log2` is `let rec log2 x = log2_step x (fun y _ -> log2 y)`.
 
 - The translator is trusted. It is an unverified Elpi program, and `TimeCheck` checks only that
   a stored time function is what the translator produces.
-- `cofix` cannot be translated, because rocq-elpi does not read cofixpoints.
+- A time function without a body beside a callee, such as a `Parameter T_g` of a module type, is
+  used without a check. A `Parameter T_g` outside a module type is an axiom. `Print Assumptions`
+  shows it, and `just check` does not reject it.
+- Database facts that a command records inside a functor are dropped when the functor ends.
+  So `TimePrim`, `TimeUnfold`, `TimeBound` and `TimeFun` for a constant of another library
+  belong outside functors. rocq-elpi gives no way to tell that a command runs inside a functor,
+  so these commands cannot reject it there. The message of `E_NO_TIME` and of `E_OPAQUE` for a
+  callee names this cause, and a bound registered inside a functor is not posed.
+- rocq-elpi gives no access to the extraction tables, so no command reads the constants that
+  extraction realises natively. A project compares them with the costs declared by `TimePrim` in
+  a test that runs `TimePrimTable` on the constants of its `Extract Constant` directives.
 - Well-founded recursion is supported through `Fix`, `Fix_F`, `Acc_rect` and
   `well_founded_induction_type`, for a result type that is not a function. `Program Fixpoint`,
   `Function` and the recursors of two arguments, such as `Fix_F_2`, are rejected. Equations is
-  not packaged in the flake, so definitions by Equations are untested.
-  The bound lemmas quantify over every recursive-call function, so a step whose cost depends on
-  the results of its recursive calls needs a bound proved by hand.
+  not packaged in the flake, so definitions by Equations are untested. The potential lemmas
+  quantify over every recursive-call function, so a step whose cost depends on the results of
+  its recursive calls needs a bound proved by hand.
 - Closures cannot be stored in data. A record of functions becomes a functor parameter.
+- `cofix` cannot be translated, because rocq-elpi does not read cofixpoints.
 - A definition whose body returns a function, such as `Pos.compare := Pos.compare_cont Eq`, is
   eta-expanded, so its partial applications pay the cost of creating the closure at every call.
   This overestimates the cost of a reused partial application by a constant per call.
 - A closure that a beta-redex or `TimeUnfold` substitutes is not charged the 1 of its call. A
   let-bound closure is charged it. Both are within the constant factor of the model.
-- rocq-elpi gives no access to the extraction tables, so no command reads the constants that
-  extraction realises natively. A project compares them with the costs declared by `TimePrim` in
-  a test that runs `TimePrimTable` on the constants of its `Extract Constant` directives.
-- Database facts that a command records inside a functor are dropped when the functor ends.
-  So `TimePrim`, `TimeUnfold`, `TimeBound` and `TimeFun` for a constant of another library
-  belong outside functors. rocq-elpi gives no way to tell that a command runs inside a functor,
-  so these commands cannot reject it there. The message of `E_NO_TIME` and of `E_OPAQUE` for a
-  callee names this cause, and a bound registered inside a functor is simply not posed.

@@ -15,7 +15,8 @@ layer.
 The method meets the following requirements.
 
 - Charges cannot be misplaced, because `T_f` is a function of the body of `f`. A changed charge
-  needs a changed program. `TimeCheck` re-derives a stored time function, and `TimeAudit`
+  needs a changed program. `TimeFun` derives again a time function that it finds beside a
+  callee before it uses it, `TimeCheck` re-derives a stored time function, and `TimeAudit`
   checks that every executable constant reachable from a root has one.
 - Published theorems are `bigO` statements, and internal lemmas use named constants.
 - `T_f` counts call-by-value work up to a constant factor (section 4), so a bound that is
@@ -137,8 +138,8 @@ T_f := λ params⁺. [fix T_F args⁺ {struct i⁺}] 1 + T⟦body[F := f params]
 - Lookup tries the database entry of the constant first. It then tries the sibling rule, which
   resolves `<suffix>.T_<id>` for every suffix of the constant's path, from longest to shortest,
   and accepts only a hit whose own path equals the constant's path. The sibling rule finds the
-  time functions of functor parameters and of functor instances, where Elpi databases cannot be
-  extended. Lookup tries the `TimePrim` table last.
+  time functions of functor parameters and of functor instances, because database facts
+  recorded inside a functor are dropped when it ends. Lookup tries the `TimePrim` table last.
 - A time function found by the sibling rule that has a body is checked before it is used. The
   translator derives the time function of the callee again, which checks the callee's own
   callees in the same way, and requires the result to be convertible with the stored one. It
@@ -158,8 +159,9 @@ The library has six theories.
 
 - `Time` holds the translator and the commands. `TimeFun` derives time functions. `TimeCheck`
   re-derives and compares. `TimeAudit` walks the constants reachable from roots. `TimePrim`
-  declares a built-in cost and is the only way to write one. `TimeUnfold` marks a constant to
-  unfold before translation. `TimeBound` registers a bound for `time_pose`.
+  declares a built-in cost and is the only way to write one, and `TimePrimTable` lists or
+  checks the declared costs. `TimeUnfold` marks a constant that is not recursive to unfold
+  before translation. `TimeBound` registers a bound for `time_pose`.
 - `BigO` defines the following, where `X` is the tuple of all inputs, so the constant is
   uniform over all of them, as Guéneau and others recommend [9].
 
@@ -179,7 +181,9 @@ The library has six theories.
   `Acc_intro_generator`, so the loop runs under `vm_compute`.
 - `Std` derives the time functions of the standard library's functions on lists, booleans,
   pairs, `nat`, `positive`, `N` and `Z`, with bounds in the length of a list or the bit length
-  of a number.
+  of a number. It also derives the time functions of the well-founded recursors `Fix_F`, `Fix`,
+  `Acc_rect` and `well_founded_induction_type`, with a potential lemma for each, in the style
+  of the loop lemmas.
 - `Tactics` holds `time_pose`, `time_simpl`, `time_step`, `loop_bound` and `amortise`.
 
 ## 4. Meta-theory
@@ -254,14 +258,20 @@ directive. Argent ships no lint.
 
 ## 6. Limits
 
-- Well-founded recursion by `Fix`, `Program Fixpoint`, `Function` or Equations is rejected, so
-  such definitions must be rewritten with `loop` or `loop_fuel`.
+- Well-founded recursion is supported through `Fix`, `Fix_F`, `Acc_rect` and
+  `well_founded_induction_type`, for a result type that is not a function. `Program Fixpoint`
+  and `Function` are rejected, so such definitions must be rewritten with `Fix`, `loop` or
+  `loop_fuel`. Equations is untested. The potential lemmas of the recursors quantify over every
+  recursive-call function, so they do not bound a step whose cost depends on the results of its
+  recursive calls.
 - Closures cannot be stored in data. Records of functions become functor parameters, and
   continuations stored in data must be defunctionalised [11].
 - `cofix` is not supported.
 - The translator is trusted. `TimeCheck` and the profile comparison of section 4 mitigate this.
 - Elpi database facts recorded inside a functor are dropped when the functor ends, so lookups
-  of time functions inside functors rely on the sibling rule.
+  of time functions inside functors rely on the sibling rule, which checks every sibling with a
+  body by deriving it again. rocq-elpi gives no way to tell that a command runs inside a
+  functor, so the registration commands cannot reject a run there.
 - The guard checker accepts the derived time functions of the nested recursion that we tested.
   The tested type is a tree whose constructor holds a `list` of subtrees, traversed either with
   `List.map` of the outer function or with a local `fix` over the list. Other nestings are
