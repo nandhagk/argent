@@ -11,7 +11,7 @@
 
     Builds on: Time Std *)
 
-From Stdlib Require Import List PArith.
+From Stdlib Require Import List PArith NArith.
 From Argent Require Import Time Std.
 Import List.ListNotations.
 
@@ -21,7 +21,7 @@ Definition expensive (n : nat) : nat := n * n.
 
 TimeFun expensive.
 
-Example expensive_cost : T_expensive 3 = 17 := eq_refl.
+Example expensive_cost : T_expensive 3 = 17%N := eq_refl.
 
 (** * Beta-redexes, partial application and eta-expansion *)
 
@@ -30,14 +30,14 @@ Definition redex (n : nat) : nat := (fun x => x + x) (expensive n).
 
 TimeFun redex.
 
-Example redex_once : T_redex 3 = 1 + T_expensive 3 + Nat.T_add 9 9 := eq_refl.
+Example redex_once : T_redex 3 = (1 + T_expensive 3 + Nat.T_add 9 9)%N := eq_refl.
 
 (** An unused argument of a redex is still evaluated. *)
 Definition dropped (n : nat) : nat := (fun _ : nat => 0) (expensive n).
 
 TimeFun dropped.
 
-Example dropped_paid : T_dropped 3 = 1 + T_expensive 3 := eq_refl.
+Example dropped_paid : T_dropped 3 = (1 + T_expensive 3)%N := eq_refl.
 
 (** A partial application evaluates its argument once, when the closure is created. *)
 Definition partial (n : nat) (l : list nat) : list nat := map (Nat.add (expensive n)) l.
@@ -45,7 +45,7 @@ Definition partial (n : nat) (l : list nat) : list nat := map (Nat.add (expensiv
 TimeFun partial.
 
 Example partial_once :
-  T_partial 3 [1; 2; 3] = 1 + T_expensive 3 + (1 + 3 * (Nat.T_add 9 0 + 1)) := eq_refl.
+  T_partial 3 [1; 2; 3] = (1 + T_expensive 3 + (1 + 3 * (Nat.T_add 9 0 + 1)))%N := eq_refl.
 
 (** An eta-expanded closure evaluates the argument at every call. *)
 Definition eta_expanded (n : nat) (l : list nat) : list nat := map (fun x => expensive n + x) l.
@@ -53,7 +53,7 @@ Definition eta_expanded (n : nat) (l : list nat) : list nat := map (fun x => exp
 TimeFun eta_expanded.
 
 Example eta_each_call :
-  T_eta_expanded 3 [1; 2; 3] = 1 + (1 + 3 * (1 + T_expensive 3 + Nat.T_add 9 0 + 1)) :=
+  T_eta_expanded 3 [1; 2; 3] = (1 + (1 + 3 * (1 + T_expensive 3 + Nat.T_add 9 0 + 1)))%N :=
   eq_refl.
 
 (** A closure passed to a higher-order function is charged at each call, plus one for the call
@@ -62,7 +62,7 @@ Definition sum (l : list nat) : nat := fold_left (fun acc x => acc + x) l 0.
 
 TimeFun sum.
 
-Example sum_cost : T_sum [1; 2; 3] = 15 := eq_refl.
+Example sum_cost : T_sum [1; 2; 3] = 15%N := eq_refl.
 
 (** * Lets and local fixpoints *)
 
@@ -71,7 +71,7 @@ Definition let_fun (n : nat) : nat := let g := fun x => x + n in g n + g 1.
 
 TimeFun let_fun.
 
-Example let_fun_cost : T_let_fun 2 = 1 + (1 + 3) + (1 + 2) + Nat.T_add 4 3 := eq_refl.
+Example let_fun_cost : T_let_fun 2 = (1 + (1 + 3) + (1 + 2) + Nat.T_add 4 3)%N := eq_refl.
 
 (** A local fixpoint gets a local time function. *)
 Definition sum_to (n : nat) : nat :=
@@ -79,7 +79,7 @@ Definition sum_to (n : nat) : nat :=
 
 TimeFun sum_to.
 
-Example sum_to_cost : T_sum_to 3 = 1 + (1 + 1) + (1 + 4) + (1 + 6) + 1 := eq_refl.
+Example sum_to_cost : T_sum_to 3 = (1 + (1 + 1) + (1 + 4) + (1 + 6) + 1)%N := eq_refl.
 
 (** A local mutual fixpoint gets a local mutual time function. *)
 Definition even_by_odd (n : nat) : bool :=
@@ -89,12 +89,12 @@ Definition even_by_odd (n : nat) : bool :=
 
 TimeFun even_by_odd.
 
-Example even_by_odd_cost : T_even_by_odd 4 = 6 := eq_refl.
+Example even_by_odd_cost : T_even_by_odd 4 = 6%N := eq_refl.
 
 (** * Mutual fixpoints *)
 
 (** [Pos.add] and [Pos.add_carry] form one block, and [Std] derives both. *)
-Example pos_add_cost : Pos.T_add 7 1 = 3 := eq_refl.
+Example pos_add_cost : Pos.T_add 7 1 = 3%N := eq_refl.
 
 Fixpoint even (n : nat) : bool :=
   match n with
@@ -109,7 +109,7 @@ with odd (n : nat) : bool :=
 
 TimeFun odd.
 
-Example even_derived_with_odd : T_even 3 = 4 /\ T_odd 3 = 4 := conj eq_refl eq_refl.
+Example even_derived_with_odd : T_even 3 = 4%N /\ T_odd 3 = 4%N := conj eq_refl eq_refl.
 
 (** * The identity monad *)
 
@@ -160,9 +160,9 @@ TimeFun size_local.
 
 Definition sample : tree := Node 0 [Node 1 []; Node 2 [Node 3 []]].
 
-Example size_cost : T_size sample = 33 := eq_refl.
+Example size_cost : T_size sample = 33%N := eq_refl.
 
-Example size_local_cost : T_size_local sample = 18 := eq_refl.
+Example size_local_cost : T_size_local sample = 18%N := eq_refl.
 
 (** * Closed constants and primitive costs *)
 
@@ -173,20 +173,20 @@ Definition use_big (n : nat) : nat := big + n.
 
 TimeFun use_big.
 
-Example closed_constant_free : T_use_big 0 = 1 + Nat.T_add big 0 := eq_refl.
+Example closed_constant_free : T_use_big 0 = (1 + Nat.T_add big 0)%N := eq_refl.
 
 Definition opaque_double (n : nat) : nat.
 Proof.
   exact (n + n).
 Qed.
 
-TimePrim opaque_double := (fun n => n + 1).
+TimePrim opaque_double := (fun n => (N.of_nat n + 1)%N).
 
 Definition use_opaque (n : nat) : nat := opaque_double n.
 
 TimeFun use_opaque.
 
-Example prim_cost : T_use_opaque 4 = 6 := eq_refl.
+Example prim_cost : T_use_opaque 4 = 6%N := eq_refl.
 
 (** * Universe polymorphism and implicit arguments *)
 
@@ -195,13 +195,13 @@ Polymorphic Definition poly_id@{u} {A : Type@{u}} (x : A) : A := x.
 TimeFun poly_id.
 
 (** The universe instance is accepted only by a universe-polymorphic constant. *)
-Example poly_id_polymorphic : @T_poly_id@{Set} nat 0 = 1 := eq_refl.
+Example poly_id_polymorphic : @T_poly_id@{Set} nat 0 = 1%N := eq_refl.
 
 (** [T_length] copies the implicit argument of [length]. *)
-Example length_implicit : Datatypes.T_length [1; 2] = 3 := eq_refl.
+Example length_implicit : Datatypes.T_length [1; 2] = 3%N := eq_refl.
 
 (** The companion follows the function argument explicitly. *)
-Example fold_left_companion : List.T_fold_left Nat.add Nat.T_add [1; 2] 0 = 6 := eq_refl.
+Example fold_left_companion : List.T_fold_left Nat.add Nat.T_add [1; 2] 0 = 6%N := eq_refl.
 
 (** * Sections *)
 
@@ -219,7 +219,7 @@ End Lengths.
 
 TimeFun len.
 
-Example len_after_section : T_len nat [1; 2] = 3 := eq_refl.
+Example len_after_section : T_len nat [1; 2] = 3%N := eq_refl.
 
 (** * Convoys and primitive projections *)
 
@@ -233,7 +233,7 @@ Definition head_plus_one (l : list nat) : nat :=
 
 TimeFun head_plus_one.
 
-Example convoy_cost : T_head_plus_one [4] = 1 + Nat.T_add 4 1 := eq_refl.
+Example convoy_cost : T_head_plus_one [4] = (1 + Nat.T_add 4 1)%N := eq_refl.
 
 #[projections(primitive)]
 Record point : Type := {
@@ -245,7 +245,7 @@ Definition point_sum (p : point) : nat := px p + py p.
 
 TimeFun point_sum.
 
-Example projection_cost : T_point_sum {| px := 2; py := 3 |} = 1 + Nat.T_add 2 3 := eq_refl.
+Example projection_cost : T_point_sum {| px := 2; py := 3 |} = (1 + Nat.T_add 2 3)%N := eq_refl.
 
 (** * Checking *)
 

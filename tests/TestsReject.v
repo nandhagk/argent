@@ -9,7 +9,7 @@
 
     Builds on: Time Std *)
 
-From Stdlib Require Import List Wf_nat.
+From Stdlib Require Import List NArith Wf_nat.
 From Argent Require Import Time Std.
 Import List.ListNotations.
 
@@ -194,7 +194,7 @@ Fail TimeFun poly_id.
 (** [TimeFun] derives again the time function that it finds beside a callee, and rejects the
     hand-written [T_cheat] below because it differs from the derived one.  [TimeCheck] rejects
     it too. *)
-Definition T_cheat (n : nat) : nat := 0.
+Definition T_cheat (n : nat) : N := 0%N.
 
 Definition cheat (n : nat) : nat := n * n * n.
 
@@ -210,7 +210,7 @@ Fail TimeCheck cheat.
     but it calls the hand-written [T_cheat], which the check of [T_mid] derives again. *)
 Definition mid (n : nat) : nat := cheat n.
 
-Definition T_mid (n : nat) : nat := 1 + T_cheat n.
+Definition T_mid (n : nat) : N := (1 + T_cheat n)%N.
 
 Definition use_mid (n : nat) : nat := mid n + 1.
 

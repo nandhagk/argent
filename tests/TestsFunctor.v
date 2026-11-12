@@ -11,16 +11,16 @@
 
     Builds on: Time Tactics Std *)
 
-From Stdlib Require Import List PArith Lia.
+From Stdlib Require Import List PArith NArith Lia.
 From Argent Require Import Time Tactics Std.
 Import List.ListNotations.
 
 Module Type LATTICE.
   Parameter t : Type.
   Parameter join : t -> t -> t.
-  Parameter T_join : t -> t -> nat.
-  Parameter c_join : nat.
-  Parameter T_join_le : forall a b, T_join a b <= c_join.
+  Parameter T_join : t -> t -> N.
+  Parameter c_join : N.
+  Parameter T_join_le : forall a b, (T_join a b <= c_join)%N.
 End LATTICE.
 
 Module JoinAll (L : LATTICE).
@@ -42,7 +42,7 @@ Module JoinAll (L : LATTICE).
   (** The bound uses only the contract [L.T_join_le], posed by [time_step] through the sibling
       rule. *)
   Lemma T_join_all_le (acc : L.t) (l : list L.t) :
-    T_join_all acc l <= (L.c_join + 1) * length l + 1.
+    (T_join_all acc l <= (L.c_join + 1) * N.of_nat (length l) + 1)%N.
   Proof.
     revert acc. induction l as [| y r IH]; intros acc; time_step.
   Qed.
@@ -53,8 +53,8 @@ Module BoolLattice <: LATTICE.
   Definition t : Type := bool.
   Definition join (a b : t) : t := orb a b.
   TimeFun join.
-  Definition c_join : nat := 2.
-  Lemma T_join_le (a b : t) : T_join a b <= c_join.
+  Definition c_join : N := 2%N.
+  Lemma T_join_le (a b : t) : (T_join a b <= c_join)%N.
   Proof.
     unfold c_join. time_step.
   Qed.
@@ -62,14 +62,14 @@ End BoolLattice.
 
 Module I := JoinAll BoolLattice.
 
-Example instance_cost : I.T_join_all false [true; false; true] = 1 + 3 * (2 + 1) := eq_refl.
+Example instance_cost : I.T_join_all false [true; false; true] = (1 + 3 * (2 + 1))%N := eq_refl.
 
 (** A client of the instance finds [I.T_join_all] by the sibling rule. *)
 Definition use_instance (l : list bool) : bool := I.join_all false l.
 
 TimeFun use_instance.
 
-Example use_instance_cost : T_use_instance [true] = 1 + I.T_join_all false [true] := eq_refl.
+Example use_instance_cost : T_use_instance [true] = (1 + I.T_join_all false [true])%N := eq_refl.
 
 (** * Checked sibling time functions
 
@@ -85,7 +85,7 @@ End KEY_OPS.
 
 Module Type KEY_T.
   Include KEY_OPS.
-  Parameter T_encode : t -> nat.
+  Parameter T_encode : t -> N.
 End KEY_T.
 
 Module FooCode (K : KEY_OPS).
@@ -108,7 +108,7 @@ Module FooT (K : KEY_T).
   (** A hand-written time function in a functor body is caught. *)
   Definition cheat (k : K.t) : positive := twice k.
 
-  Definition T_cheat (k : K.t) : nat := 0.
+  Definition T_cheat (k : K.t) : N := 0%N.
 
   Definition use_cheat (k : K.t) : positive := cheat k.
 
@@ -129,7 +129,7 @@ Definition use_quad (p : positive) : positive := FP.quad p.
 
 TimeFun use_quad.
 
-Example use_quad_cost : T_use_quad 1%positive = 1 + FP.T_quad 1%positive := eq_refl.
+Example use_quad_cost : T_use_quad 1%positive = (1 + FP.T_quad 1%positive)%N := eq_refl.
 
 TimeCheck use_quad.
 
@@ -149,12 +149,12 @@ TimeFunFails "E_CHECK" use_instance_cheat.
 Module Type TWO_COSTS.
   Parameter f : nat -> nat.
   Parameter g : nat -> nat.
-  Parameter T_f : nat -> nat.
-  Parameter T_g : nat -> nat.
-  Parameter c1 : nat.
-  Parameter c2 : nat.
-  Parameter T_f_le : forall n, T_f n <= c1 * (n + 1).
-  Parameter T_g_le : forall n, T_g n <= c2 * (n + 1).
+  Parameter T_f : nat -> N.
+  Parameter T_g : nat -> N.
+  Parameter c1 : N.
+  Parameter c2 : N.
+  Parameter T_f_le : forall n, (T_f n <= c1 * (N.of_nat n + 1))%N.
+  Parameter T_g_le : forall n, (T_g n <= c2 * (N.of_nat n + 1))%N.
 End TWO_COSTS.
 
 Module UseTwo (M : TWO_COSTS).
@@ -162,7 +162,8 @@ Module UseTwo (M : TWO_COSTS).
 
   TimeFun both.
 
-  Lemma T_both_le (n m : nat) : T_both n m <= M.c1 * (n + 1) + M.c2 * (m + 1) + 1.
+  Lemma T_both_le (n m : nat) :
+    (T_both n m <= M.c1 * (N.of_nat n + 1) + M.c2 * (N.of_nat m + 1) + 1)%N.
   Proof.
     time_step.
   Qed.
@@ -171,18 +172,19 @@ Module UseTwo (M : TWO_COSTS).
 
   TimeFun twice_f.
 
-  (** The bound needs [M.c1 * n <= M.c1 * m] from [n <= m]. *)
-  Lemma T_twice_f_le (n m : nat) : n <= m -> T_twice_f n m <= 2 * M.c1 * (m + 1) + 1.
+  (** The bound needs [M.c1 * N.of_nat n <= M.c1 * N.of_nat m] from [n <= m] on [nat]. *)
+  Lemma T_twice_f_le (n m : nat) :
+    n <= m -> (T_twice_f n m <= 2 * M.c1 * (N.of_nat m + 1) + 1)%N.
   Proof.
     intros Hnm. time_step.
   Qed.
 
   (** A bound that does not hold leaves the goal as [time_step] found it, with its products. *)
-  Lemma T_twice_f_wrong (n : nat) : T_twice_f n n <= M.c1 * n.
+  Lemma T_twice_f_wrong (n : nat) : (T_twice_f n n <= M.c1 * N.of_nat n)%N.
   Proof.
     time_step.
     lazymatch goal with
-    | |- context [M.c1 * _] => idtac
+    | |- context [(M.c1 * _)%N] => idtac
     end.
     assert_fails (clear time_prod).
   Abort.
@@ -190,14 +192,14 @@ End UseTwo.
 
 (** [time_lin] alone closes a goal that needs the monotone consequence [c * a <= c * b] of
     [a <= b] for the folded constant [c], and fails on products that it cannot relate. *)
-Definition c : nat := 3.
+Definition c : N := 3%N.
 
-Example time_lin_mono (a b t : nat) : a <= b -> t <= c * (a + 1) -> t <= c * (b + 1).
+Example time_lin_mono (a b t : N) : (a <= b -> t <= c * (a + 1) -> t <= c * (b + 1))%N.
 Proof.
   intros Hab Ht. time_lin.
 Qed.
 
-Example time_lin_fails (a b : nat) : c * a <= c * b.
+Example time_lin_fails (a b : N) : (c * a <= c * b)%N.
 Proof.
   Fail time_lin.
 Abort.
