@@ -8,9 +8,9 @@ enforce their use, and what the design cannot do.
 
 Argent follows the time-function method of Nipkow and others [1], ported to Rocq with
 rocq-elpi. Programs are plain Gallina. For each executable definition `f`, an Elpi command
-defines a separate, transparent, `nat`-valued constant `T_f` from the kernel term of `f`. A
-generic component is a functor whose signature carries a time layer next to its functional
-layer.
+defines a separate, transparent constant `T_f` with values in `N` from the kernel term of
+`f`. A generic component is a functor whose signature carries a time layer next to its
+functional layer.
 
 The method meets the following requirements.
 
@@ -46,8 +46,10 @@ The alternatives that we considered lose some of these properties.
 
 ## 2. The translation
 
-`T⟦e⟧ : nat` is the cost of call-by-value evaluation of `e`. `F⟦e⟧` is the time function of a
-function-valued `e`, and `C⟦e⟧` is the cost of creating the closure `e`.
+`T⟦e⟧ : N` is the cost of call-by-value evaluation of `e`. `F⟦e⟧` is the time function of a
+function-valued `e`, and `C⟦e⟧` is the cost of creating the closure `e`. A cost is a binary
+number of type `N`, so a time value has size logarithmic in the time, and `vm_compute`
+evaluates a time function on large inputs. Every `0`, `1` and `+` in the rules below is in `N`.
 
 ### Shapes
 
@@ -68,7 +70,7 @@ callee's time function.
 
 - `τ⟦Π(x:A).B⟧ = Π(x:A). [Π(T_x : τ⟦A⟧).] τ⟦B⟧`, where the bracketed binder is present iff `x`
   has a function shape.
-- `τ⟦B⟧ = nat` otherwise.
+- `τ⟦B⟧ = N` otherwise.
 
 ### The top-level rule
 
@@ -112,8 +114,8 @@ T_f := λ params⁺. [fix T_F args⁺ {struct i⁺}] 1 + T⟦body[F := f params]
 | `let g := v in b`, `g` a function | `C⟦v⟧ + let g := v in let T_g := F⟦v⟧ in T⟦b⟧` |
 | `(λx. k) m` | `let x := m in k`. A variable, a closure or an irrelevant argument is substituted, since evaluating it costs nothing. |
 | A call of a `TimeUnfold` constant `c` | the body of `c` applied to the arguments, translated by the redex rule |
-| `match e as y in I idx return P with pᵢ ⇒ bᵢ end` | `T⟦e⟧ + match e as y in I idx return nat with pᵢ ⇒ T⟦bᵢ⟧ end`, folded to `T⟦e⟧` when every branch costs 0. A scrutinee in `Prop` costs 0. |
-| `(match e return Π ȳ. P with p ⇒ λȳ. b end) prfs`, all `prfs` irrelevant | `T⟦e⟧ + (match e return Π ȳ. nat with p ⇒ λȳ. T⟦b⟧ end) prfs` |
+| `match e as y in I idx return P with pᵢ ⇒ bᵢ end` | `T⟦e⟧ + match e as y in I idx return N with pᵢ ⇒ T⟦bᵢ⟧ end`, folded to `T⟦e⟧` when every branch costs 0. A scrutinee in `Prop` costs 0. |
+| `(match e return Π ȳ. P with p ⇒ λȳ. b end) prfs`, all `prfs` irrelevant | `T⟦e⟧ + (match e return Π ȳ. N with p ⇒ λȳ. T⟦b⟧ end) prfs` |
 | A `match` that returns a function and is applied to data | `E_MATCH_FN` |
 | `fun` or an unapplied `fix` in a data position | `E_CLOSURE` |
 | Any other form | `E_TERM`. rocq-elpi cannot read `cofix`, so a definition that contains one fails before translation. |
@@ -166,9 +168,9 @@ The library has six theories.
   uniform over all of them, as Guéneau and others recommend [9].
 
   ```coq
-  Definition bigO {X} (P : X -> Prop) (g T : X -> nat) : Prop :=
+  Definition bigO {X} (P : X -> Prop) (g T : X -> N) : Prop :=
     exists c, forall x, P x -> T x <= c * (g x + 1).
-  Definition tight {X} (P : X -> Prop) (g T : X -> nat) : Prop :=
+  Definition tight {X} (P : X -> Prop) (g T : X -> N) : Prop :=
     bigO P g T /\ exists c, forall n, exists x, P x /\ n <= g x /\ g x <= c * T x.
   ```
 
@@ -181,10 +183,12 @@ The library has six theories.
   `Acc_intro_generator`, so the loop runs under `vm_compute`.
 - `Std` derives the time functions of the standard library's functions on lists, booleans,
   pairs, `nat`, `positive`, `N` and `Z`, with bounds in the length of a list or the bit length
-  of a number. It also derives the time functions of the well-founded recursors `Fix_F`, `Fix`,
-  `Acc_rect` and `well_founded_induction_type`, with a potential lemma for each, in the style
-  of the loop lemmas.
-- `Tactics` holds `time_pose`, `time_simpl`, `time_step`, `loop_bound` and `amortise`.
+  of a number. Each size is a `nat` and enters a bound as `N.of_nat` of the size. `Std` also
+  derives the time functions of the well-founded recursors `Fix_F`, `Fix`, `Acc_rect` and
+  `well_founded_induction_type`, with a potential lemma for each, in the style of the loop
+  lemmas.
+- `Tactics` holds `time_pose`, `time_simpl`, `time_cbn`, `time_step`, `loop_bound` and
+  `amortise`.
 
 ## 4. Meta-theory
 
@@ -194,8 +198,8 @@ arguments are evaluated once. Constants realised natively by extraction cost wha
 declares. Everything else is Gallina code, so `positive` arithmetic costs one step per bit
 unless it is realised natively.
 
-**Claim.** For a closed call `f v̄`, let `N` be the number of steps of a call-by-value machine and
-`K` the size of the largest body reachable from `f`. Then `T_f v̄ <= N <= K * (T_f v̄ + 1)`.
+**Claim.** For a closed call `f v̄`, let `M` be the number of steps of a call-by-value machine and
+`K` the size of the largest body reachable from `f`. Then `T_f v̄ <= M <= K * (T_f v̄ + 1)`.
 
 **Argument.**
 
@@ -208,7 +212,7 @@ unless it is realised natively.
    that part takes at most `K` steps. A closure that a redex substitutes or that `TimeUnfold`
    inlines is called at most once per execution of the enclosing body, so the same argument
    covers it without its own 1.
-3. Hence `T_f v̄ <= N <= K * (T_f v̄ + 1)`, which is Θ.
+3. Hence `T_f v̄ <= M <= K * (T_f v̄ + 1)`, which is Θ.
 
 The claim is argued here and is not a theorem of the library.
 

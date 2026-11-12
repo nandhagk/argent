@@ -16,8 +16,12 @@ scrutinee plus the branch that runs, and a `let` costs its value once. Types and
 erased, so they cost nothing. A constant applied only to types and proofs, such as `@nil A`,
 is evaluated once when the program starts, so it also costs nothing.
 
+A time value is a binary number of type `N`, so it has size logarithmic in the time, and
+`vm_compute` evaluates a time function on large inputs. `tests/TestsLarge.v` evaluates the time
+of `rev_append` on 1,000,000 elements this way.
+
 A function argument `g` of `f` gets a companion `T_g` right after it in `T_f`. For example,
-`T_map` has the type `forall A B, (A -> B) -> (A -> nat) -> list A -> nat`. At a call site
+`T_map` has the type `forall A B, (A -> B) -> (A -> N) -> list A -> N`. At a call site
 the companion is derived from the argument itself. A closure `fun x => e` has the companion
 `fun x => 1 + T⟦e⟧`, and a partial application `h a` has `fun x => T_h a x`, whose argument
 `a` is paid once, when the closure is created. Function values may be passed as arguments,
@@ -77,11 +81,13 @@ TimeAudit Trie.get Trie.set Queue.step.
 
 `TimePrim c := (e)` declares the cost `e` of a constant that has no usable body, such as an
 opaque constant or one that extraction replaces by native code. The type of `e` is the time
-type of `c`. `TimePrim c := n` declares a constant cost `n`. It is the only way to write a cost
-by hand, so its uses are the place to review.
+type of `c`, whose result is `N`. `TimePrim c := n` declares a constant cost `n`, which becomes
+a literal of type `N`. It is the only way to write a cost by hand, so its uses are the place to
+review. A scope delimiter such as `%N` goes inside the parentheses, because the command does
+not read one after them.
 
 ```coq
-TimePrim opaque_double := (fun n => n + 1).
+TimePrim opaque_double := (fun n => (N.of_nat n + 1)%N).
 ```
 
 `TimePrimTable` prints every cost declared with `TimePrim`, sorted by the full name of its
@@ -106,13 +112,13 @@ Definition bind {A B : Type} (m : M A) (f : A -> M B) : M B := f m.
 TimeUnfold ret bind.
 ```
 
-`TimeBound L` registers a lemma `L : forall x̄, [P x̄ ->] T_g ā <= B` for `time_pose`. A lemma
+`TimeBound L` registers a lemma `L : forall x̄, [P x̄ ->] (T_g ā <= B)%N` for `time_pose`. A lemma
 named `T_g_le` beside `T_g` is found without registration. That is the only way for a bound
 proved inside a functor, because database facts recorded inside a functor are dropped when it
 ends.
 
 ```coq
-Lemma twice_bound (n : nat) : T_twice n <= n + 2.
+Lemma twice_bound (n : nat) : (T_twice n <= N.of_nat n + 2)%N.
 TimeBound twice_bound.
 ```
 
@@ -139,25 +145,31 @@ code.
 
 ## Tactics
 
-The tactics are in `Argent.Tactics`. Time functions never unfold under `cbn` or `simpl`, so a
-plain `cbn` computes the specification functions in a goal and leaves every time function
-folded.
+The tactics are in `Argent.Tactics`. Time functions never unfold under `cbn` or `simpl`.
+However, a plain `cbn` unfolds `N.add` and `N.mul` applied to a numeral, so it turns `1 + t`
+into a `match` on `t` that `lia` cannot read. It also turns `N.of_nat (S n)` into a positive
+literal over `Pos.of_succ_nat n`. The tactic `time_cbn` avoids both problems.
 
 - `time_unfold T_f` unfolds by one step every application of `T_f` whose structural argument is
   a constructor, and refolds its recursive calls.
 - `time_simpl` replaces the time functions whose value is a numeral, such as `T_negb`, by that
   numeral.
+- `time_cbn` runs `cbn` with `N.add`, `N.mul` and `N.of_nat` folded, so it computes the
+  specification functions, such as `length (x :: l)`, and leaves every time function folded.
+  It then rewrites `N.of_nat (S n)` to `N.of_nat n + 1`. `time_cbn_all` does the same in every
+  hypothesis.
 - `time_pose` adds, for each time function applied in the goal, its registered bound, its
   sibling `T_g_le` and the matching quantified hypotheses, such as an induction hypothesis or a
   bound on a companion. It discharges premises with `assumption`, `lia` or
   `eauto with time_inv`.
 - `time_step` unfolds the time function on the left of a goal `T_f ā <= e` by one step, runs
-  `time_simpl` and `cbn`, poses the bounds, and tries `time_lin` and then `nia`. When both fail,
-  it destructs the scrutinees of the matches left in the goal and tries again. `time_step f`
-  names the function `f` instead.
+  `time_simpl` and `time_cbn`, poses the bounds, and tries `time_lin` and then `nia`. When both
+  fail, it destructs the scrutinees of the matches left in the goal and tries again.
+  `time_step f` names the function `f` instead.
 - `time_lin` closes a goal that is linear over products by an abstract constant, such as
   `c_map * (bits k + 1)` with `c_map` a `Parameter` of a signature. It distributes the products,
-  adds `c * a <= c * b` for each hypothesis `a <= b` and each such constant `c`, replaces the
+  adds `c * a <= c * b` for each hypothesis `a <= b` on `N` and each such constant `c`, and
+  `c * N.of_nat a <= c * N.of_nat b` for each hypothesis `a <= b` on `nat`. It replaces the
   products of terms that are not numerals by fresh variables, and calls `lia`. It runs only
   when a constant multiplies a term, and it fails with the goal unchanged. In the bounds of
   `Std` and of the examples that we tried, `nia` already closed every goal that `time_lin`
@@ -168,7 +180,8 @@ folded.
 Most per-operation bounds take one line.
 
 ```coq
-Theorem T_get_le {A : Type} (p : positive) (m : t A) : T_get p m <= Pos.size_nat p.
+Theorem T_get_le {A : Type} (p : positive) (m : t A) :
+  (T_get p m <= N.of_nat (Pos.size_nat p))%N.
 Proof.
   revert m. induction p as [p IH | p IH |]; intros [| l o r]; time_step.
 Qed.
@@ -189,6 +202,13 @@ A module type that describes an operation has two layers. The functional layer d
 operation and its laws. The time layer declares the time function, a named constant and a
 contract that bounds the time function by that constant.
 
+Every statement about time follows one rule. A time function, a time constant, a potential and
+a bound have type `N`. A size that is a `nat`, such as `length l`, `Pos.size_nat p`,
+`N.size_nat n` or the bit length of a `Z`, stays a specification function with values in `nat`
+and enters a bound as `N.of_nat` of the size. A size that is already an `N`, such as the
+argument `x : N` of a function that halves it, enters a bound as it is. A file of bounds can
+open `N_scope` and mark its statements about sizes alone with `%nat`, as `Argent.Std` does.
+
 ```coq
 Module Type MAP.
   Declare Module K : KEY.
@@ -196,10 +216,10 @@ Module Type MAP.
   Parameter get : forall {A : Type}, K.t -> t A -> option A.
   Parameter get_set_same : forall A k (v : A) m, get k (set k v m) = Some v.
   (* Time layer. *)
-  Parameter T_get : forall {A : Type}, K.t -> t A -> nat.
-  Parameter c_map : nat.
+  Parameter T_get : forall {A : Type}, K.t -> t A -> N.
+  Parameter c_map : N.
   Parameter T_get_le :
-    forall A k (m : t A), T_get k m <= c_map * (Pos.size_nat (K.encode k) + 1).
+    forall A k (m : t A), (T_get k m <= c_map * (N.of_nat (Pos.size_nat (K.encode k)) + 1))%N.
 End MAP.
 ```
 
@@ -216,11 +236,11 @@ structure.
 
 1. Define the operations as one function `step : op -> S -> S` over an inductive type `op` of
    operations, and run `TimeFun step`.
-2. Choose a potential `Phi : S -> nat`, an invariant `Inv`, and an amortised cost `A o s`.
+2. Choose a potential `Phi : S -> N`, an invariant `Inv`, and an amortised cost `A o s : N`.
 3. Prove `amortised step T_step A Phi Inv`, which says that every operation keeps `Inv` and
    that `T_step o s + Phi (step o s) <= A o s + Phi s`.
 4. Apply `amortised_run` for the exact statement, or `amortised_uniform`, through the tactic
-   `amortise`, for the bound `total step T_step os s <= k * length os + Phi s`.
+   `amortise`, for the bound `total step T_step os s <= k * N.of_nat (length os) + Phi s`.
 
 The bound holds along one sequence of versions. It says nothing about a history in which one
 version is used twice, because repeating an expensive operation on the same version is not
@@ -243,12 +263,13 @@ Definition log2 (x : N) : nat :=
 TimeFun log2_step log2.
 ```
 
-A bound comes from a potential `Phi`. `Wf.T_Fix_le` says that `T_Fix Rwf P F T_F x <= Phi x + 1`
-when every step satisfies `T_F x rec T_rec + 1 <= Phi x` for every `rec` and every `T_rec` with
-`T_rec y h <= Phi y + 1`. `Wf.T_Fix_F_le`, `Wf.T_Acc_rect_le` and
-`Wf.T_well_founded_induction_type_le` state the same for the other recursors. The step
-`log2_step` takes its proof of decrease from the equation of a convoy match, and
-`examples/Halving.v` proves the bounds of `log2` and of a divide-and-conquer function this way.
+A bound comes from a potential `Phi : A -> N`. `Wf.T_Fix_le` says that
+`T_Fix Rwf P F T_F x <= Phi x + 1` when every step satisfies `T_F x rec T_rec + 1 <= Phi x` for
+every `rec` and every `T_rec` with `T_rec y h <= Phi y + 1`. `Wf.T_Fix_F_le`,
+`Wf.T_Acc_rect_le` and `Wf.T_well_founded_induction_type_le` state the same for the other
+recursors. The step `log2_step` takes its proof of decrease from the equation of a convoy
+match, and `examples/Halving.v` proves the bounds of `log2` and of a divide-and-conquer function
+this way.
 
 The result type `P x` must not be a function type. `TimeFun` rejects such a definition with
 `E_WF`. It also rejects `Program Fixpoint`, which goes through `Fix_sub`, and `Function`, whose
