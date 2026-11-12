@@ -18,7 +18,10 @@ is evaluated once when the program starts, so it also costs nothing.
 
 A time value is a binary number of type `N`, so it has size logarithmic in the time, and
 `vm_compute` evaluates a time function on large inputs. `tests/TestsLarge.v` evaluates the time
-of `rev_append` on 1,000,000 elements this way.
+of `rev_append` on 1,000,000 elements this way. Evaluating a time function also recomputes the
+values that the time functions of its callees take as arguments, so it can take longer than the
+function itself. For example, `List.T_rev` computes `rev` of every suffix of its argument, so its
+evaluation takes time cubic in the length of the list, while `rev` takes quadratic time.
 
 A function argument `g` of `f` gets a companion `T_g` right after it in `T_f`. For example,
 `T_map` has the type `forall A B, (A -> B) -> (A -> N) -> list A -> N`. At a call site
@@ -146,7 +149,7 @@ code.
 ## Tactics
 
 The tactics are in `Argent.Tactics`. Time functions never unfold under `cbn` or `simpl`.
-However, a plain `cbn` unfolds `N.add` and `N.mul` applied to a numeral, so it turns `1 + t`
+However, a plain `cbn` unfolds an operation of `N` applied to a numeral, so it turns `1 + t`
 into a `match` on `t` that `lia` cannot read. It also turns `N.of_nat (S n)` into a positive
 literal over `Pos.of_succ_nat n`. The tactic `time_cbn` avoids both problems.
 
@@ -154,8 +157,11 @@ literal over `Pos.of_succ_nat n`. The tactic `time_cbn` avoids both problems.
   a constructor, and refolds its recursive calls.
 - `time_simpl` replaces the time functions whose value is a numeral, such as `T_negb`, by that
   numeral.
-- `time_cbn` runs `cbn` with `N.add`, `N.mul` and `N.of_nat` folded, so it computes the
-  specification functions, such as `length (x :: l)`, and leaves every time function folded.
+- `time_cbn` runs `cbn` with the arithmetic of `N` folded, so it computes the specification
+  functions, such as `length (x :: l)`, and leaves every time function folded. The folded
+  constants are `N.add`, `N.mul`, `N.sub`, `N.succ`, `N.pred`, `N.max`, `N.min`, `N.div`,
+  `N.modulo`, `N.pow` and `N.of_nat`. Size functions such as `N.size_nat` and conversions such as
+  `Z.abs_N` and `N.to_nat` still compute.
   It then rewrites `N.of_nat (S n)` to `N.of_nat n + 1`. `time_cbn_all` does the same in every
   hypothesis.
 - `time_pose` adds, for each time function applied in the goal, its registered bound, its
