@@ -291,14 +291,20 @@ Proof.
   lia.
 Qed.
 
-(** Compute the specification functions in the goal.  [N.add] and [N.mul] stay folded, because
-    [cbn] would turn [1 + t] into a match on [t] that [lia] cannot read.  [N.of_nat] stays
-    folded too, so that [N.of_nat (S n)] becomes [N.of_nat n + 1] and not a positive literal
-    over [Pos.of_succ_nat n]. *)
-Ltac time_cbn := cbn -[N.add N.mul N.of_nat]; rewrite ?time_of_nat_succ.
+(** Compute the specification functions in the goal, and keep the arithmetic of [N] folded.
+    [cbn] would turn [1 + t] into a match on [t], and [N.pos p - 6] into matches on [p] over
+    [Pos.sub_mask], which [lia] cannot read.  So the operations of [N] that [lia] reads stay
+    folded, and so does [N.of_nat], so that [N.of_nat (S n)] becomes [N.of_nat n + 1] and not a
+    positive literal over [Pos.of_succ_nat n].  Size functions such as [N.size_nat] and
+    conversions such as [Z.abs_N] and [N.to_nat] still compute. *)
+Ltac time_cbn :=
+  cbn -[N.add N.mul N.sub N.succ N.pred N.max N.min N.div N.modulo N.pow N.of_nat];
+  rewrite ?time_of_nat_succ.
 
 (** [time_cbn] in the goal and in every hypothesis. *)
-Ltac time_cbn_all := cbn -[N.add N.mul N.of_nat] in *; rewrite ?time_of_nat_succ in *.
+Ltac time_cbn_all :=
+  cbn -[N.add N.mul N.sub N.succ N.pred N.max N.min N.div N.modulo N.pow N.of_nat] in *;
+  rewrite ?time_of_nat_succ in *.
 
 (** On the goal [t], which unfolds one time function of the original goal by one step: simplify,
     compute the specification functions, pose the callee bounds and try [time_lin] and then

@@ -76,6 +76,28 @@ Proof.
   lia.
 Qed.
 
+(** [time_cbn] keeps the arithmetic of [N] folded, so [lia] reads the subtraction and the
+    predecessor of a positive number. *)
+Example cbn_sub (p : positive) : (N.pos p - 6 <= N.pos p)%N.
+Proof.
+  time_cbn. lia.
+Qed.
+
+Example cbn_pred (p : positive) : (N.pred (N.pos p) <= N.pos p)%N.
+Proof.
+  time_cbn. lia.
+Qed.
+
+(** [lia] does not read a division, so [time_cbn] must leave it as it is. *)
+Example cbn_div (p : positive) : (N.pos p / 2 <= N.pos p)%N.
+Proof.
+  time_cbn.
+  lazymatch goal with
+  | |- (N.pos p / 2 <= N.pos p)%N => idtac
+  end.
+  apply N.Div0.div_le_upper_bound. lia.
+Qed.
+
 (** [time_step] on a goal with no time function fails with a message. *)
 Example step_needs_time_function : (1 <= 2)%N.
 Proof.
