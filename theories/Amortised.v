@@ -12,14 +12,16 @@
     The bounds hold along one sequence of versions.  They say nothing about a branching history
     in which one version is used several times.
 
-    Builds on: Stdlib Lia *)
+    Builds on: Stdlib Lia NArith *)
 
-From Stdlib Require Import List Lia.
+From Stdlib Require Import List Lia NArith.
 Import List.ListNotations.
+
+Local Open Scope N_scope.
 
 Section Amortised.
 
-Context {S O : Type} (op : O -> S -> S) (T A : O -> S -> nat) (Phi : S -> nat)
+Context {S O : Type} (op : O -> S -> S) (T A : O -> S -> N) (Phi : S -> N)
   (Inv : S -> Prop).
 
 (** The state after the operations [os]. *)
@@ -30,14 +32,14 @@ Fixpoint run (os : list O) (s : S) : S :=
   end.
 
 (** The actual cost of the operations [os]. *)
-Fixpoint total (os : list O) (s : S) : nat :=
+Fixpoint total (os : list O) (s : S) : N :=
   match os with
   | [] => 0
   | o :: r => T o s + total r (op o s)
   end.
 
 (** The amortised cost of the operations [os]. *)
-Fixpoint budget (os : list O) (s : S) : nat :=
+Fixpoint budget (os : list O) (s : S) : N :=
   match os with
   | [] => 0
   | o :: r => A o s + budget r (op o s)
@@ -60,12 +62,12 @@ Qed.
 
 (** With an amortised cost of at most [k] per operation, a sequence of [n] operations costs at
     most [k * n] plus the initial potential. *)
-Theorem amortised_uniform (k : nat) :
+Theorem amortised_uniform (k : N) :
   amortised -> (forall o s, Inv s -> A o s <= k) ->
-  forall os s, Inv s -> total os s <= k * length os + Phi s.
+  forall os s, Inv s -> total os s <= k * N.of_nat (length os) + Phi s.
 Proof.
   intros Hamort Hcap.
-  assert (Hbudget : forall os s, Inv s -> budget os s <= k * length os).
+  assert (Hbudget : forall os s, Inv s -> budget os s <= k * N.of_nat (length os)).
   { intros os. induction os as [| o r IH]; intros s Hs; cbn [budget length].
     - lia.
     - destruct (Hamort o s Hs) as [Hinv _]. specialize (IH (op o s) Hinv).

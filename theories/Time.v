@@ -2,13 +2,16 @@
 
     This file defines the commands that derive a time function [T_f] from the kernel body of a
     Gallina definition [f], and the databases those commands share.  [T_f] counts the steps of
-    call-by-value evaluation of [f]: one per call of a defined function or closure body.
+    call-by-value evaluation of [f]: one per call of a defined function or closure body.  The
+    count is a binary number of type [N].
 
     For example, [TimeFun length.] defines
-    [T_length = fun A => fix T_length l := 1 + match l with [] => 0 | _ :: l' => T_length l' end].
+    [T_length = fun A => fix T_length l := 1 + match l with [] => 0 | _ :: l' => T_length l' end]
+    in [N_scope].
 
-    Builds on: rocq-elpi *)
+    Builds on: rocq-elpi, Stdlib NArith *)
 
+From Stdlib Require Import NArith.
 From elpi Require Import elpi.
 
 (** * Databases
@@ -118,7 +121,7 @@ tname N TN :- coq.name->id N S, coq.id->name {calc ("T_" ^ S)} TN.
 
 % [tau T Ss TT]: the time type of T, following the binder shapes Ss.
 pred tau i:term, i:list shape, o:term.
-tau _ [] {{ nat }} :- !.
+tau _ [] {{ N }} :- !.
 tau T [S|Ss] R :- wh T (prod N D B), tau-binder N D S B Ss R.
 
 pred tau-binder i:name, i:term, i:shape, i:(term -> term), i:list shape, o:term.
@@ -139,12 +142,12 @@ shift-step _ J1 J :- J is J1 + 1.
 % Small term utilities
 
 pred zero i:term.
-zero {{ 0 }}.
+zero {{ 0%N }}.
 
 pred plus i:term, i:term, o:term.
 plus A B B :- zero A, !.
 plus A B A :- zero B, !.
-plus A B {{ lp:A + lp:B }}.
+plus A B {{ (lp:A + lp:B)%N }}.
 
 pred beta-app i:term, i:list term, o:term.
 beta-app (fun _ _ B) [X|Xs] R :- !, beta-app (B X) Xs R.
@@ -277,10 +280,10 @@ cost (fix _ _ _ _ as F) _ :- !,
   err "E_CLOSURE" {calc ("local fix in a value position, not applied: " ^ {tstr F})}.
 cost (mfix _ _ _ as F) _ :- !,
   err "E_CLOSURE" {calc ("local fix in a value position, not applied: " ^ {tstr F})}.
-cost X {{ 0 }} :- name X, !.
-cost (sort _) {{ 0 }} :- !.
-cost (prod _ _ _) {{ 0 }} :- !.
-cost (primitive _) {{ 0 }} :- !.
+cost X {{ 0%N }} :- name X, !.
+cost (sort _) {{ 0%N }} :- !.
+cost (prod _ _ _) {{ 0%N }} :- !.
+cost (primitive _) {{ 0%N }} :- !.
 cost T _ :- err "E_TERM" {calc ("unsupported term: " ^ {tstr T})}.
 
 % A beta-redex (fun x => k) m is read as let x := m in k.  Variables, closures and irrelevant
@@ -375,17 +378,17 @@ check-constructor _ _.
 % [args HTy Ks As C As2]: the cost C of evaluating the arguments As, and As2, the arguments
 % with a companion inserted after each function argument.
 pred args i:term, i:list shape, i:list term, o:term, o:list term.
-args _ [] [] {{ 0 }} [] :- !.
+args _ [] [] {{ 0%N }} [] :- !.
 args HTy [S|Ss] [A|As] C As2 :- wh HTy (prod _ D B),
   arg S D A CA As2a, args (B A) Ss As C0 As2b, plus CA C0 C, std.append As2a As2b As2.
 
 pred arg i:shape, i:term, i:term, o:term, o:list term.
-arg sh-irr _ A {{ 0 }} [A] :- !.
+arg sh-irr _ A {{ 0%N }} [A] :- !.
 arg (sh-fn Sub) D A CA [A, TA] :- !, fntime A Sub D CA TA.
 arg sh-val D A CA [A] :- val-arg D A CA.
 
 pred val-arg i:term, i:term, o:term.
-val-arg D _ {{ 0 }} :- irr D, !.
+val-arg D _ {{ 0%N }} :- irr D, !.
 val-arg D A _ :- wh D (prod _ _ _), !,
   err "E_CLOSURE_DATA" {calc ("closure stored in data: " ^ {tstr A} ^
     " is passed where the callee expects data of type " ^ {tstr D})}.
@@ -393,9 +396,9 @@ val-arg _ A C :- cost A C.
 
 % [call H Ks As2 R]: the cost of the call itself, given the arguments with companions.
 pred call i:term, i:list shape, i:list term, o:term.
-call H _ _ {{ 0 }} :- head-gref H (indc _), !.
+call H _ _ {{ 0%N }} :- head-gref H (indc _), !.
 call H _ As2 R :- currec H Nc TF, !, drop-n Nc As2 Rest, beta-app TF Rest R.
-call H Ks _ {{ 0 }} :- head-gref H (const _), std.forall Ks (k\ k = sh-irr), !.
+call H Ks _ {{ 0%N }} :- head-gref H (const _), std.forall Ks (k\ k = sh-irr), !.
 call H _ As2 R :- head-gref H GR, lookup GR TGR, !, check-callee GR TGR, record GR,
   coq.env.global TGR TH, coq.mk-app TH As2 R.
 call H _ As2 R :- tfun H TH, !, coq.mk-app TH As2 R.
@@ -442,13 +445,13 @@ functor-hint S :- S is "; a TimeFun for a constant of another library, a TimePri
 % instantiated type is D.
 
 pred fntime i:term, i:list shape, i:term, o:term, o:term.
-fntime X _ _ {{ 0 }} TX :- tfun X TX, !.
+fntime X _ _ {{ 0%N }} TX :- tfun X TX, !.
 fntime (app [H]) Ss D C F :- !, fntime H Ss D C F.
 fntime (app [app L|As]) Ss D C F :- !, std.append L As L2, fntime (app L2) Ss D C F.
 fntime (app [fun N T B, A|As]) Ss D C F :- !, redex N T B A As R, fntime R Ss D C F.
 fntime (app [let N T V B|As]) Ss D C F :- !, fntime (let N T V (x\ app [B x|As])) Ss D C F.
 fntime (let N T V B) Ss D C F :- !, fn-let-val N T V B Ss D C F.
-fntime (fun _ _ _ as L) Ss D {{ 0 }} F :- !, eta Ss D [] [] (lam-body L) F.
+fntime (fun _ _ _ as L) Ss D {{ 0%N }} F :- !, eta Ss D [] [] (lam-body L) F.
 fntime (match _ _ _ as M) _ _ _ _ :- !,
   err "E_MATCH_FN" {calc ("a match returns a function; eta-expand it: " ^ {tstr M})}.
 fntime (app [match _ _ _|_] as M) _ _ _ _ :- !,
@@ -481,7 +484,7 @@ partial-app H As Ss D C F :-
   eta Ss D [] [] K F.
 
 pred partial-body i:term, i:list term, o:(pred i:list term, i:list term, o:term).
-partial-body H _ (_\ _\ r\ r = {{ 1 }}) :- head-gref H (indc _), !.
+partial-body H _ (_\ _\ r\ r = {{ 1%N }}) :- head-gref H (indc _), !.
 partial-body H As (xs\ _\ r\ full-call H As xs r).
 
 % The call cost of h (ā ++ x̄), with the cost of ā already paid at closure creation.
@@ -492,7 +495,7 @@ full-call H As Xs R :-
   args HTy Ks All _ As2, call H Ks As2 R.
 
 pred lam-body i:term, i:list term, i:list term, o:term.
-lam-body L Xs _ R :- coq.mk-app L Xs T, cost T C, plus {{ 1 }} C R.
+lam-body L Xs _ R :- coq.mk-app L Xs T, cost T C, plus {{ 1%N }} C R.
 
 % [eta Ss D Xs Xps K F]: λ x̄⁺ over the binders of D with shapes Ss, then K x̄ x̄⁺.
 pred eta i:list shape, i:term, i:list term, i:list term,
@@ -521,11 +524,11 @@ costm E Rty Bs Xs C :-
   match-result E Rty2 Bs2 Xs M, plus CE M C.
 
 pred scrut-cost i:term, o:term.
-scrut-cost E {{ 0 }} :- coq.typecheck E T ok, irr T, !.
+scrut-cost E {{ 0%N }} :- coq.typecheck E T ok, irr T, !.
 scrut-cost E C :- cost E C.
 
 pred match-result i:term, i:term, i:list term, i:list term, o:term.
-match-result _ _ Bs _ {{ 0 }} :- std.forall Bs zb, !.
+match-result _ _ Bs _ {{ 0%N }} :- std.forall Bs zb, !.
 match-result E R Bs Xs M :- coq.mk-app (match E R Bs) Xs M.
 
 pred zb i:term.
@@ -542,7 +545,7 @@ ind-of (pglobal (indt I) _) I.
 ind-of (app [global (indt I)|_]) I.
 ind-of (app [pglobal (indt I) _|_]) I.
 
-% The return clause becomes nat (or Π ȳ. nat for a convoy of K proofs).
+% The return clause becomes N (or Π ȳ. N for a convoy of K proofs).
 pred retnat i:int, i:term, o:term, o:inductive.
 retnat K (fun N T B) (fun N T R) I :- (pi x\ sigma A B1 C1\ B x = fun A B1 C1), !,
   pi x\ decl x N T => retnat K (B x) (R x) I.
@@ -554,7 +557,7 @@ pred retk i:int, i:term, o:term.
 retk 0 T _ :- wh T (prod _ _ _), not (ends-sort T), !,
   err "E_MATCH_FN" {calc ("a match returns a function of type " ^ {tstr T} ^
     "; eta-expand the match")}.
-retk 0 _ {{ nat }} :- !.
+retk 0 _ {{ N }} :- !.
 retk K T (prod N D R) :- wh T (prod N D B), !, K1 is K - 1,
   pi x\ decl x N D => retk K1 (B x) (R x).
 retk _ T _ :- err "E_TERM" {calc ("unsupported convoy return type: " ^ {tstr T})}.
@@ -591,11 +594,11 @@ pred body-time i:term, o:term.
 body-time Bo R :- head-type Bo Ty, binder-shapes Ty Ss, body-time-ss Bo Ty Ss R.
 
 pred body-time-ss i:term, i:term, i:list shape, o:term.
-body-time-ss Bo _ [] R :- !, cost Bo C, plus {{ 1 }} C R.
+body-time-ss Bo _ [] R :- !, cost Bo C, plus {{ 1%N }} C R.
 body-time-ss Bo Ty Ss R :- fntime Bo Ss Ty C F, eta Ss Ty [] [] (eta-top C F) R.
 
 pred eta-top i:term, i:term, i:list term, i:list term, o:term.
-eta-top C F _ Xps R :- beta-app F Xps FX, plus C FX R0, plus {{ 1 }} R0 R.
+eta-top C F _ Xps R :- beta-app F Xps FX, plus C FX R0, plus {{ 1%N }} R0 R.
 
 pred tfix i:name, i:int, i:term, i:(term -> term), i:term, i:term, i:int, o:term.
 tfix N I Ty B Key Val Nc (fix TN I2 TTy R) :-
@@ -838,11 +841,16 @@ timecheck GR :- lookup GR _, !,
   err "E_CHECK" {calc ("TimeCheck: the time function of " ^ {gstr GR} ^ " has no body")}.
 timecheck GR :- err "E_CHECK" {calc ("TimeCheck: " ^ {gstr GR} ^ " has no time function")}.
 
+% [time-le T L]: T is the bound L <= B on time values, of type N.
+pred time-le i:term, o:term.
+time-le (app [H, L, _]) L :- H = {{ N.le }}.
+
 % [bound-head Ty TG]: Ty is forall x̄, [P x̄ ->] T_g ā <= B, and TG is T_g.
 pred bound-head i:term, o:gref.
 bound-head (prod N D B) G :- !, pi x\ decl x N D => bound-head (B x) G.
-bound-head (app [global (indt Le), L, _]) G :- coq.locate "le" (indt Le), head-gref-app L G, !.
-bound-head _ _ :- coq.error "TimeBound: the conclusion must have the form T_g args <= bound".
+bound-head T G :- time-le T L, head-gref-app L G, !.
+bound-head _ _ :-
+  coq.error "TimeBound: the conclusion must have the form (T_g args <= bound)%N".
 
 pred head-gref-app i:term, o:gref.
 head-gref-app (app [H|_]) G :- head-gref H G.
@@ -933,15 +941,22 @@ main [str S, str ":=", trm E] :- !, coq.locate S GR, check-untimed GR, prim-type
    coq.error "TimePrim: the cost of" S "must have type" {coq.term->string TTy}),
   declare-prim GR E2.
 main [str S, str ":=", int N] :- !, coq.locate S GR, check-untimed GR, prim-type GR TTy,
-  nat-of N K, const-fun TTy K E, declare-prim GR E.
+  n-of N K, const-fun TTy K E, declare-prim GR E.
 main _ :- coq.error "TimePrim: expected TimePrim c := (e) or TimePrim c := n".
 
 pred prim-type i:gref, o:term.
 prim-type GR TTy :- coq.env.typeof GR Ty, binder-shapes Ty Ss, tau Ty Ss TTy.
 
-pred nat-of i:int, o:term.
-nat-of 0 {{ 0 }} :- !.
-nat-of N {{ S lp:K }} :- M is N - 1, nat-of M K.
+% [n-of N K]: K is the binary literal of type N for the integer N.
+pred n-of i:int, o:term.
+n-of N _ :- N < 0, !, coq.error "TimePrim: the cost" N "is negative".
+n-of 0 {{ N0 }} :- !.
+n-of N {{ Npos lp:P }} :- pos-of N P.
+
+pred pos-of i:int, o:term.
+pos-of 1 {{ xH }} :- !.
+pos-of N {{ xO lp:P }} :- 0 is N mod 2, !, M is N div 2, pos-of M P.
+pos-of N {{ xI lp:P }} :- M is N div 2, pos-of M P.
 
 pred const-fun i:term, i:term, o:term.
 const-fun (prod N D B) K (fun N D R) :- !, pi x\ decl x N D => const-fun (B x) K (R x).
@@ -988,7 +1003,7 @@ insert X [Y|Ys] [Y|Zs] :- insert X Ys Zs.
 pred expect-names i:list argument, i:list entry.
 expect-names [] _ :- !.
 expect-names Args Sorted :- std.map Args arg-name Names,
-  std.map Names (n\ e\ e = ent n {{ 0 }}) Es, sort Es SortedEs,
+  std.map Names (n\ e\ e = ent n {{ 0%N }}) Es, sort Es SortedEs,
   std.map SortedEs entry-name Want, std.map Sorted entry-name Have,
   (Want = Have, ! ;
    coq.error "TimePrimTable: the constants with a declared cost are" Have "and not" Want).

@@ -11,7 +11,7 @@
 
     Builds on: Time *)
 
-From Stdlib Require Import Lia.
+From Stdlib Require Import Lia NArith.
 From Argent Require Import Time.
 
 Scheme Acc_ind_dep := Induction for Acc Sort Prop.
@@ -33,12 +33,12 @@ TimeFun loop.
     [Phi], and a stopping step costs at most [Tstop]; then the whole loop costs at most
     [Phi s + Tstop + 1]. *)
 Theorem T_loop_le {S R : Type} (lt : S -> S -> Prop)
-    (step : forall s, {s1 : S | lt s1 s} + R) (T_step : S -> nat) (Inv : S -> Prop)
-    (Phi : S -> nat) (Tstop : nat) :
+    (step : forall s, {s1 : S | lt s1 s} + R) (T_step : S -> N) (Inv : S -> Prop)
+    (Phi : S -> N) (Tstop : N) :
   (forall s s1 Hlt, Inv s -> step s = inl (exist _ s1 Hlt) ->
-    Inv s1 /\ T_step s + Phi s1 < Phi s) ->
-  (forall s r, Inv s -> step s = inr r -> T_step s <= Tstop) ->
-  forall s (H : Acc lt s), Inv s -> T_loop lt step T_step s H <= Phi s + Tstop + 1.
+    Inv s1 /\ (T_step s + Phi s1 < Phi s)%N) ->
+  (forall s r, Inv s -> step s = inr r -> (T_step s <= Tstop)%N) ->
+  forall s (H : Acc lt s), Inv s -> (T_loop lt step T_step s H <= Phi s + Tstop + 1)%N.
 Proof.
   intros Hgo Hstop s H. induction H as [s Hacc IH] using Acc_ind_dep. intros Hinv.
   time_unfold @T_loop. cbn [Acc_inv]. destruct (step s) as [[s1 Hlt] | r] eqn:Hstep.
@@ -64,11 +64,11 @@ Fixpoint loop_fuel {St R : Type} (step : St -> St + R) (fuel : nat) (s : St) : S
 TimeFun loop_fuel.
 
 (** The bound of [T_loop_le] for the fuel loop; it holds for every amount of fuel. *)
-Theorem T_loop_fuel_le {St R : Type} (step : St -> St + R) (T_step : St -> nat)
-    (Inv : St -> Prop) (Phi : St -> nat) (Tstop : nat) :
-  (forall s s1, Inv s -> step s = inl s1 -> Inv s1 /\ T_step s + Phi s1 < Phi s) ->
-  (forall s r, Inv s -> step s = inr r -> T_step s <= Tstop) ->
-  forall fuel s, Inv s -> T_loop_fuel step T_step fuel s <= Phi s + Tstop + 1.
+Theorem T_loop_fuel_le {St R : Type} (step : St -> St + R) (T_step : St -> N)
+    (Inv : St -> Prop) (Phi : St -> N) (Tstop : N) :
+  (forall s s1, Inv s -> step s = inl s1 -> Inv s1 /\ (T_step s + Phi s1 < Phi s)%N) ->
+  (forall s r, Inv s -> step s = inr r -> (T_step s <= Tstop)%N) ->
+  forall fuel s, Inv s -> (T_loop_fuel step T_step fuel s <= Phi s + Tstop + 1)%N.
 Proof.
   intros Hgo Hstop fuel. induction fuel as [| fuel IH]; intros s Hinv;
     time_unfold @T_loop_fuel.

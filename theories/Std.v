@@ -9,17 +9,22 @@
     [Wf.T_Fix].
 
     Bounds are stated in the natural size of the arguments, the length of a list or the bit
-    length [Pos.size_nat] of a number, with explicit constants.  The model is the extracted
-    code with no native numbers, so [nat] arithmetic is unary and [positive] arithmetic is per
-    bit.
+    length [Pos.size_nat] of a number, with explicit constants.  Times and bounds are in [N],
+    and a size of type [nat] enters a bound as [N.of_nat] of the size, so this file opens
+    [N_scope] and marks the statements about sizes alone with [%nat].  The model is the
+    extracted code with no native numbers, so [nat] arithmetic is unary and [positive]
+    arithmetic is per bit.
 
-    For example, [List.T_rev_le] says [List.T_rev l <= (length l + 1) * (length l + 1)].
+    For example, [List.T_rev_le] says
+    [List.T_rev l <= (N.of_nat (length l) + 1) * (N.of_nat (length l) + 1)].
 
     Builds on: Time Tactics *)
 
 From Stdlib Require Import List Lia PArith NArith ZArith.
 From Argent Require Import Time Tactics.
 Import List.ListNotations.
+
+Local Open Scope N_scope.
 
 (** * Booleans, pairs and lists of the prelude *)
 
@@ -57,12 +62,12 @@ Proof.
   time_step.
 Qed.
 
-Lemma T_length_le {A : Type} (l : list A) : T_length l <= length l + 1.
+Lemma T_length_le {A : Type} (l : list A) : T_length l <= N.of_nat (length l) + 1.
 Proof.
   induction l as [| x l IH]; time_step.
 Qed.
 
-Lemma T_app_le {A : Type} (l m : list A) : T_app l m <= length l + 1.
+Lemma T_app_le {A : Type} (l m : list A) : T_app l m <= N.of_nat (length l) + 1.
 Proof.
   induction l as [| x l IH]; time_step.
 Qed.
@@ -73,8 +78,8 @@ Module ListDef.
 
 TimeFun map.
 
-Lemma T_map_le {A B : Type} (f : A -> B) (T_f : A -> nat) (k : nat) (l : list A) :
-  (forall a, T_f a <= k) -> T_map f T_f l <= (k + 1) * length l + 1.
+Lemma T_map_le {A B : Type} (f : A -> B) (T_f : A -> N) (k : N) (l : list A) :
+  (forall a, T_f a <= k) -> T_map f T_f l <= (k + 1) * N.of_nat (length l) + 1.
 Proof.
   intros Hf. induction l as [| x l IH]; time_step.
 Qed.
@@ -87,55 +92,57 @@ Module List.
 
 TimeFun rev_append rev filter fold_left fold_right existsb forallb nth_error combine.
 
-Lemma T_rev_append_le {A : Type} (l m : list A) : T_rev_append l m <= length l + 1.
+Lemma T_rev_append_le {A : Type} (l m : list A) : T_rev_append l m <= N.of_nat (length l) + 1.
 Proof.
   revert m. induction l as [| x l IH]; intros m; time_step.
 Qed.
 
-Lemma T_rev_le {A : Type} (l : list A) : T_rev l <= (length l + 1) * (length l + 1).
+Lemma T_rev_le {A : Type} (l : list A) :
+  T_rev l <= (N.of_nat (length l) + 1) * (N.of_nat (length l) + 1).
 Proof.
   induction l as [| x l IH]; time_step.
   rewrite length_rev in *. nia.
 Qed.
 
-Lemma T_filter_le {A : Type} (f : A -> bool) (T_f : A -> nat) (k : nat) (l : list A) :
-  (forall a, T_f a <= k) -> T_filter f T_f l <= (k + 1) * length l + 1.
+Lemma T_filter_le {A : Type} (f : A -> bool) (T_f : A -> N) (k : N) (l : list A) :
+  (forall a, T_f a <= k) -> T_filter f T_f l <= (k + 1) * N.of_nat (length l) + 1.
 Proof.
   intros Hf. induction l as [| x l IH]; time_step.
 Qed.
 
-Lemma T_fold_left_le {A B : Type} (f : A -> B -> A) (T_f : A -> B -> nat) (k : nat)
+Lemma T_fold_left_le {A B : Type} (f : A -> B -> A) (T_f : A -> B -> N) (k : N)
     (l : list B) (a : A) :
-  (forall a b, T_f a b <= k) -> T_fold_left f T_f l a <= (k + 1) * length l + 1.
+  (forall a b, T_f a b <= k) -> T_fold_left f T_f l a <= (k + 1) * N.of_nat (length l) + 1.
 Proof.
   intros Hf. revert a. induction l as [| x l IH]; intros a; time_step.
 Qed.
 
-Lemma T_fold_right_le {A B : Type} (f : B -> A -> A) (T_f : B -> A -> nat) (k : nat)
+Lemma T_fold_right_le {A B : Type} (f : B -> A -> A) (T_f : B -> A -> N) (k : N)
     (a : A) (l : list B) :
-  (forall b a, T_f b a <= k) -> T_fold_right f T_f a l <= (k + 1) * length l + 1.
+  (forall b a, T_f b a <= k) -> T_fold_right f T_f a l <= (k + 1) * N.of_nat (length l) + 1.
 Proof.
   intros Hf. induction l as [| x l IH]; time_step.
 Qed.
 
-Lemma T_existsb_le {A : Type} (f : A -> bool) (T_f : A -> nat) (k : nat) (l : list A) :
-  (forall a, T_f a <= k) -> T_existsb f T_f l <= (k + 2) * length l + 1.
+Lemma T_existsb_le {A : Type} (f : A -> bool) (T_f : A -> N) (k : N) (l : list A) :
+  (forall a, T_f a <= k) -> T_existsb f T_f l <= (k + 2) * N.of_nat (length l) + 1.
 Proof.
   intros Hf. induction l as [| x l IH]; time_step.
 Qed.
 
-Lemma T_forallb_le {A : Type} (f : A -> bool) (T_f : A -> nat) (k : nat) (l : list A) :
-  (forall a, T_f a <= k) -> T_forallb f T_f l <= (k + 2) * length l + 1.
+Lemma T_forallb_le {A : Type} (f : A -> bool) (T_f : A -> N) (k : N) (l : list A) :
+  (forall a, T_f a <= k) -> T_forallb f T_f l <= (k + 2) * N.of_nat (length l) + 1.
 Proof.
   intros Hf. induction l as [| x l IH]; time_step.
 Qed.
 
-Lemma T_nth_error_le {A : Type} (l : list A) (n : nat) : T_nth_error l n <= n + 1.
+Lemma T_nth_error_le {A : Type} (l : list A) (n : nat) : T_nth_error l n <= N.of_nat n + 1.
 Proof.
   revert l. induction n as [| n IH]; intros [| x l]; time_step.
 Qed.
 
-Lemma T_combine_le {A B : Type} (l : list A) (m : list B) : T_combine l m <= length l + 1.
+Lemma T_combine_le {A B : Type} (l : list A) (m : list B) :
+  T_combine l m <= N.of_nat (length l) + 1.
 Proof.
   revert m. induction l as [| x l IH]; intros [| y m]; time_step.
 Qed.
@@ -148,22 +155,22 @@ Module Nat.
 
 TimeFun Nat.add Nat.mul Nat.eqb Nat.leb.
 
-Lemma T_add_le (n m : nat) : T_add n m <= n + 1.
+Lemma T_add_le (n m : nat) : T_add n m <= N.of_nat n + 1.
 Proof.
   induction n as [| n IH]; time_step.
 Qed.
 
-Lemma T_mul_le (n m : nat) : T_mul n m <= (n + 1) * (m + 2).
+Lemma T_mul_le (n m : nat) : T_mul n m <= (N.of_nat n + 1) * (N.of_nat m + 2).
 Proof.
   induction n as [| n IH]; time_step.
 Qed.
 
-Lemma T_eqb_le (n m : nat) : T_eqb n m <= n + 1.
+Lemma T_eqb_le (n m : nat) : T_eqb n m <= N.of_nat n + 1.
 Proof.
   revert m. induction n as [| n IH]; intros [| m]; time_step.
 Qed.
 
-Lemma T_leb_le (n m : nat) : T_leb n m <= n + 1.
+Lemma T_leb_le (n m : nat) : T_leb n m <= N.of_nat n + 1.
 Proof.
   revert m. induction n as [| n IH]; intros [| m]; time_step.
 Qed.
@@ -179,66 +186,68 @@ TimeFun Pos.succ Pos.add Pos.pred_double Pos.pred_N Pos.eqb Pos.compare_cont Pos
   Pos.double_pred_mask Pos.sub_mask Pos.sub Pos.Ndouble Pos.Nsucc_double Pos.land Pos.lor
   Pos.lxor Pos.ldiff Pos.iter Pos.div2 Pos.div2_up Pos.pred Pos.gcdn Pos.gcd Pos.shiftl.
 
-Lemma T_succ_le (p : positive) : T_succ p <= Pos.size_nat p.
+Lemma T_succ_le (p : positive) : T_succ p <= N.of_nat (Pos.size_nat p).
 Proof.
   induction p as [p IH | p IH |]; time_step.
 Qed.
 
 (** [Pos.add] and [Pos.add_carry] are one mutual block, so their bounds are proved together. *)
 Lemma T_add_carry_both (p q : positive) :
-  T_add p q <= Pos.size_nat p + Pos.size_nat q /\
-  T_add_carry p q <= Pos.size_nat p + Pos.size_nat q.
+  T_add p q <= N.of_nat (Pos.size_nat p + Pos.size_nat q) /\
+  T_add_carry p q <= N.of_nat (Pos.size_nat p + Pos.size_nat q).
 Proof.
   revert q. induction p as [p IH | p IH |]; intros [q | q |];
     time_unfold T_add; time_unfold T_add_carry; cbn [Pos.size_nat]; try specialize (IH q);
     try pose proof (T_succ_le p); try pose proof (T_succ_le q); lia.
 Qed.
 
-Lemma T_add_le (p q : positive) : T_add p q <= Pos.size_nat p + Pos.size_nat q.
+Lemma T_add_le (p q : positive) : T_add p q <= N.of_nat (Pos.size_nat p + Pos.size_nat q).
 Proof.
   exact (proj1 (T_add_carry_both p q)).
 Qed.
 
-Lemma T_add_carry_le (p q : positive) : T_add_carry p q <= Pos.size_nat p + Pos.size_nat q.
+Lemma T_add_carry_le (p q : positive) :
+  T_add_carry p q <= N.of_nat (Pos.size_nat p + Pos.size_nat q).
 Proof.
   exact (proj2 (T_add_carry_both p q)).
 Qed.
 
-Lemma T_pred_double_le (p : positive) : T_pred_double p <= Pos.size_nat p.
+Lemma T_pred_double_le (p : positive) : T_pred_double p <= N.of_nat (Pos.size_nat p).
 Proof.
   induction p as [p IH | p IH |]; time_step.
 Qed.
 
-Lemma T_eqb_le (p q : positive) : T_eqb p q <= Pos.size_nat p.
+Lemma T_eqb_le (p q : positive) : T_eqb p q <= N.of_nat (Pos.size_nat p).
 Proof.
   revert q. induction p as [p IH | p IH |]; intros [q | q |]; time_step.
 Qed.
 
 Lemma T_compare_cont_le (r : comparison) (p q : positive) :
-  T_compare_cont r p q <= Pos.size_nat p.
+  T_compare_cont r p q <= N.of_nat (Pos.size_nat p).
 Proof.
   revert q r. induction p as [p IH | p IH |]; intros [q | q |] r; time_step.
 Qed.
 
-Lemma T_compare_le (p q : positive) : T_compare p q <= Pos.size_nat p + 1.
+Lemma T_compare_le (p q : positive) : T_compare p q <= N.of_nat (Pos.size_nat p) + 1.
 Proof.
   time_step.
 Qed.
 
-Lemma T_size_nat_le (p : positive) : T_size_nat p <= Pos.size_nat p.
+Lemma T_size_nat_le (p : positive) : T_size_nat p <= N.of_nat (Pos.size_nat p).
 Proof.
   induction p as [p IH | p IH |]; time_step.
 Qed.
 
 (** [Pos.size_nat p] is the bit length of [p]: [p] is below [2 ^ Pos.size_nat p], and it is the
     least such exponent. *)
-Lemma size_nat_upper (p : positive) : Pos.to_nat p < 2 ^ Pos.size_nat p.
+Lemma size_nat_upper (p : positive) : (Pos.to_nat p < 2 ^ Pos.size_nat p)%nat.
 Proof.
   induction p as [p IH | p IH |]; cbn [Pos.size_nat Nat.pow];
     rewrite ?Pos2Nat.inj_xI, ?Pos2Nat.inj_xO, ?Pos2Nat.inj_1; lia.
 Qed.
 
-Lemma size_nat_least (p : positive) (k : nat) : Pos.to_nat p < 2 ^ k -> Pos.size_nat p <= k.
+Lemma size_nat_least (p : positive) (k : nat) :
+  (Pos.to_nat p < 2 ^ k -> Pos.size_nat p <= k)%nat.
 Proof.
   revert k. induction p as [p IH | p IH |]; intros [| k] Hlt; cbn [Pos.size_nat Nat.pow] in *;
     rewrite ?Pos2Nat.inj_xI, ?Pos2Nat.inj_xO, ?Pos2Nat.inj_1 in Hlt;
@@ -248,14 +257,15 @@ Proof.
 Qed.
 
 Lemma size_nat_mul (p q : positive) :
-  Pos.size_nat (p * q) <= Pos.size_nat p + Pos.size_nat q.
+  (Pos.size_nat (p * q) <= Pos.size_nat p + Pos.size_nat q)%nat.
 Proof.
   apply size_nat_least. rewrite Pos2Nat.inj_mul, Nat.pow_add_r.
   pose proof (size_nat_upper p). pose proof (size_nat_upper q). nia.
 Qed.
 
 Lemma T_mul_le (p q : positive) :
-  T_mul p q <= Pos.size_nat p * (Pos.size_nat p + 2 * Pos.size_nat q + 2).
+  T_mul p q <=
+  N.of_nat (Pos.size_nat p) * (N.of_nat (Pos.size_nat p) + 2 * N.of_nat (Pos.size_nat q) + 2).
 Proof.
   induction p as [p IH | p IH |]; time_unfold T_mul; cbn [Pos.size_nat].
   - pose proof (T_add_le q (p * q)~0). pose proof (size_nat_mul p q).
@@ -265,12 +275,12 @@ Proof.
 Qed.
 
 
-Lemma size_nat_pos (p : positive) : 1 <= Pos.size_nat p.
+Lemma size_nat_pos (p : positive) : (1 <= Pos.size_nat p)%nat.
 Proof.
   destruct p; cbn [Pos.size_nat]; lia.
 Qed.
 
-Lemma T_pred_N_le (p : positive) : T_pred_N p <= Pos.size_nat p + 1.
+Lemma T_pred_N_le (p : positive) : T_pred_N p <= N.of_nat (Pos.size_nat p) + 1.
 Proof.
   destruct p; time_step.
 Qed.
@@ -280,29 +290,29 @@ Proof.
   time_step.
 Qed.
 
-Lemma T_div2_up_le (p : positive) : T_div2_up p <= Pos.size_nat p + 1.
+Lemma T_div2_up_le (p : positive) : T_div2_up p <= N.of_nat (Pos.size_nat p) + 1.
 Proof.
   destruct p; time_step.
 Qed.
 
 (** * Bitwise operations *)
 
-Lemma T_land_le (p q : positive) : T_land p q <= 2 * Pos.size_nat p.
+Lemma T_land_le (p q : positive) : T_land p q <= 2 * N.of_nat (Pos.size_nat p).
 Proof.
   revert q. induction p as [p IH | p IH |]; intros [q | q |]; time_step.
 Qed.
 
-Lemma T_lor_le (p q : positive) : T_lor p q <= Pos.size_nat p.
+Lemma T_lor_le (p q : positive) : T_lor p q <= N.of_nat (Pos.size_nat p).
 Proof.
   revert q. induction p as [p IH | p IH |]; intros [q | q |]; time_step.
 Qed.
 
-Lemma T_lxor_le (p q : positive) : T_lxor p q <= 2 * Pos.size_nat p.
+Lemma T_lxor_le (p q : positive) : T_lxor p q <= 2 * N.of_nat (Pos.size_nat p).
 Proof.
   revert q. induction p as [p IH | p IH |]; intros [q | q |]; time_step.
 Qed.
 
-Lemma T_ldiff_le (p q : positive) : T_ldiff p q <= 2 * Pos.size_nat p.
+Lemma T_ldiff_le (p q : positive) : T_ldiff p q <= 2 * N.of_nat (Pos.size_nat p).
 Proof.
   revert q. induction p as [p IH | p IH |]; intros [q | q |]; time_step.
 Qed.
@@ -319,7 +329,7 @@ Proof.
   destruct m; time_step.
 Qed.
 
-Lemma T_double_pred_mask_le (p : positive) : T_double_pred_mask p <= Pos.size_nat p + 1.
+Lemma T_double_pred_mask_le (p : positive) : T_double_pred_mask p <= N.of_nat (Pos.size_nat p) + 1.
 Proof.
   destruct p; time_step.
 Qed.
@@ -327,8 +337,8 @@ Qed.
 (** [Pos.sub_mask] and [Pos.sub_mask_carry] are one mutual block, so their bounds are proved
     together. *)
 Lemma T_sub_mask_both (p q : positive) :
-  T_sub_mask p q <= Pos.size_nat p + Pos.size_nat q /\
-  T_sub_mask_carry p q <= Pos.size_nat p + Pos.size_nat q.
+  T_sub_mask p q <= N.of_nat (Pos.size_nat p + Pos.size_nat q) /\
+  T_sub_mask_carry p q <= N.of_nat (Pos.size_nat p + Pos.size_nat q).
 Proof.
   revert p. induction q as [q IH | q IH |]; intros [p | p |];
     time_unfold T_sub_mask; time_unfold T_sub_mask_carry; cbn [Pos.size_nat];
@@ -340,12 +350,12 @@ Proof.
     try pose proof (T_pred_double_le p); try pose proof (T_double_pred_mask_le p); lia.
 Qed.
 
-Lemma T_sub_le (p q : positive) : T_sub p q <= Pos.size_nat p + Pos.size_nat q + 1.
+Lemma T_sub_le (p q : positive) : T_sub p q <= N.of_nat (Pos.size_nat p + Pos.size_nat q) + 1.
 Proof.
   pose proof (proj1 (T_sub_mask_both p q)). time_step.
 Qed.
 
-Lemma size_nat_sub (p q : positive) : Pos.size_nat (p - q) <= Pos.size_nat p.
+Lemma size_nat_sub (p q : positive) : (Pos.size_nat (p - q) <= Pos.size_nat p)%nat.
 Proof.
   destruct (Pos.lt_total q p) as [Hlt | [Heq | Hgt]].
   - apply Pos.size_nat_monotone, Pos.sub_decr, Hlt.
@@ -355,13 +365,13 @@ Qed.
 
 (** * Iteration and the greatest common divisor *)
 
-Lemma T_iter_lt {A : Type} (f : A -> A) (T_f : A -> nat) (Inv : A -> Prop) (k : nat)
+Lemma T_iter_lt {A : Type} (f : A -> A) (T_f : A -> N) (Inv : A -> Prop) (k : N)
     (x : A) (n : positive) :
   (forall y, Inv y -> Inv (f y)) -> (forall y, Inv y -> T_f y <= k) -> Inv x ->
-  T_iter f T_f x n < (k + 2) * Pos.to_nat n.
+  T_iter f T_f x n < (k + 2) * N.pos n.
 Proof.
   intros Hinv Hf. revert x. induction n as [n IH | n IH |]; intros x Hx;
-    time_unfold @T_iter; rewrite ?Pos2Nat.inj_xI, ?Pos2Nat.inj_xO, ?Pos2Nat.inj_1.
+    time_unfold @T_iter.
   - pose proof (Pos.iter_invariant n A f Inv Hinv x Hx) as Hx1.
     pose proof (Pos.iter_invariant n A f Inv Hinv _ Hx1) as Hx2.
     pose proof (IH x Hx). pose proof (IH _ Hx1). pose proof (Hf _ Hx2). nia.
@@ -372,10 +382,10 @@ Qed.
 
 (** [Pos.iter f x n] calls [f] [n] times, so its time is linear in the value of [n] when [f]
     keeps the invariant [Inv] and takes at most [k] steps on every state that satisfies it. *)
-Lemma T_iter_le {A : Type} (f : A -> A) (T_f : A -> nat) (Inv : A -> Prop) (k : nat)
+Lemma T_iter_le {A : Type} (f : A -> A) (T_f : A -> N) (Inv : A -> Prop) (k : N)
     (x : A) (n : positive) :
   (forall y, Inv y -> Inv (f y)) -> (forall y, Inv y -> T_f y <= k) -> Inv x ->
-  T_iter f T_f x n <= (k + 2) * Pos.to_nat n.
+  T_iter f T_f x n <= (k + 2) * N.pos n.
 Proof.
   intros Hinv Hf Hx. pose proof (T_iter_lt f T_f Inv k x n Hinv Hf Hx). lia.
 Qed.
@@ -383,10 +393,11 @@ Qed.
 (** Each step of [Pos.gcdn] compares and subtracts its arguments, whose total bit length [s]
     never grows, so [n] steps take [O(n * s)] time. *)
 Lemma T_gcdn_le (n : nat) (a b : positive) (s : nat) :
-  Pos.size_nat a + Pos.size_nat b <= s -> T_gcdn n a b <= (n + 1) * (2 * s + 3).
+  (Pos.size_nat a + Pos.size_nat b <= s)%nat ->
+  T_gcdn n a b <= (N.of_nat n + 1) * (2 * N.of_nat s + 3).
 Proof.
   revert a b. induction n as [| n IH]; intros a b Hs; time_unfold T_gcdn; [lia |].
-  rewrite Nat.add_succ_l, Nat.mul_succ_l.
+  rewrite time_of_nat_succ, (N.mul_add_distr_r (N.of_nat n + 1) 1), N.mul_1_l.
   destruct a as [a | a |], b as [b | b |]; cbn [Pos.size_nat] in Hs;
     try (pose proof (T_compare_le a b); pose proof (T_sub_le a b); pose proof (T_sub_le b a);
          pose proof (size_nat_sub a b); pose proof (size_nat_sub b a);
@@ -395,7 +406,7 @@ Proof.
            | |- context [T_gcdn n ?x ?y] =>
              let Hrec := fresh "Hrec" in
              let t := fresh "t" in
-             assert (Hrec : T_gcdn n x y <= (n + 1) * (2 * s + 3))
+             assert (Hrec : T_gcdn n x y <= (N.of_nat n + 1) * (2 * N.of_nat s + 3))
                by (apply IH; cbn [Pos.size_nat]; lia);
              set (t := T_gcdn n x y) in *; clearbody t
            end; lia.
@@ -404,7 +415,8 @@ Qed.
 (** [Pos.gcd] runs [Pos.gcdn] for the total bit length of its arguments, so it is quadratic. *)
 Lemma T_gcd_le (a b : positive) :
   T_gcd a b <=
-  (Pos.size_nat a + Pos.size_nat b + 2) * (2 * (Pos.size_nat a + Pos.size_nat b) + 3).
+  (N.of_nat (Pos.size_nat a + Pos.size_nat b) + 2) *
+  (2 * N.of_nat (Pos.size_nat a + Pos.size_nat b) + 3).
 Proof.
   pose proof (T_gcdn_le (Pos.size_nat a + Pos.size_nat b) a b _ (le_n _)).
   pose proof (T_size_nat_le a). pose proof (T_size_nat_le b).
@@ -421,43 +433,43 @@ Module N.
 TimeFun N.succ_pos N.double N.succ_double N.add N.sub N.eqb N.compare N.leb N.ltb N.succ N.pred
   N.pos_div_eucl N.land N.lor N.lxor N.ldiff N.div2 N.shiftl N.shiftr N.ones N.lnot N.size_nat.
 
-Lemma T_add_le (n m : N) : T_add n m <= N.size_nat n + N.size_nat m + 1.
+Lemma T_add_le (n m : N) : T_add n m <= N.of_nat (N.size_nat n + N.size_nat m) + 1.
 Proof.
   destruct n, m; time_step.
 Qed.
 
-Lemma T_eqb_le (n m : N) : T_eqb n m <= N.size_nat n + 1.
+Lemma T_eqb_le (n m : N) : T_eqb n m <= N.of_nat (N.size_nat n) + 1.
 Proof.
   destruct n, m; time_step.
 Qed.
 
-Lemma T_compare_le (n m : N) : T_compare n m <= N.size_nat n + 2.
+Lemma T_compare_le (n m : N) : T_compare n m <= N.of_nat (N.size_nat n) + 2.
 Proof.
   destruct n, m; time_step.
 Qed.
 
 
-Lemma T_size_nat_le (n : N) : T_size_nat n <= N.size_nat n + 1.
+Lemma T_size_nat_le (n : N) : T_size_nat n <= N.of_nat (N.size_nat n) + 1.
 Proof.
   destruct n; time_step.
 Qed.
 
-Lemma T_succ_pos_le (n : N) : T_succ_pos n <= N.size_nat n + 1.
+Lemma T_succ_pos_le (n : N) : T_succ_pos n <= N.of_nat (N.size_nat n) + 1.
 Proof.
   destruct n; time_step.
 Qed.
 
-Lemma T_succ_le (n : N) : T_succ n <= N.size_nat n + 1.
+Lemma T_succ_le (n : N) : T_succ n <= N.of_nat (N.size_nat n) + 1.
 Proof.
   destruct n; time_step.
 Qed.
 
-Lemma T_pred_le (n : N) : T_pred n <= N.size_nat n + 2.
+Lemma T_pred_le (n : N) : T_pred n <= N.of_nat (N.size_nat n) + 2.
 Proof.
   destruct n; time_step.
 Qed.
 
-Lemma T_leb_le (n m : N) : T_leb n m <= N.size_nat n + 3.
+Lemma T_leb_le (n m : N) : T_leb n m <= N.of_nat (N.size_nat n) + 3.
 Proof.
   time_step.
 Qed.
@@ -467,22 +479,22 @@ Proof.
   destruct n as [| [p | p |]]; time_step.
 Qed.
 
-Lemma T_land_le (n m : N) : T_land n m <= 2 * N.size_nat n + 1.
+Lemma T_land_le (n m : N) : T_land n m <= 2 * N.of_nat (N.size_nat n) + 1.
 Proof.
   destruct n, m; time_step.
 Qed.
 
-Lemma T_lor_le (n m : N) : T_lor n m <= N.size_nat n + 1.
+Lemma T_lor_le (n m : N) : T_lor n m <= N.of_nat (N.size_nat n) + 1.
 Proof.
   destruct n, m; time_step.
 Qed.
 
-Lemma T_lxor_le (n m : N) : T_lxor n m <= 2 * N.size_nat n + 1.
+Lemma T_lxor_le (n m : N) : T_lxor n m <= 2 * N.of_nat (N.size_nat n) + 1.
 Proof.
   destruct n, m; time_step.
 Qed.
 
-Lemma T_ldiff_le (n m : N) : T_ldiff n m <= 2 * N.size_nat n + 1.
+Lemma T_ldiff_le (n m : N) : T_ldiff n m <= 2 * N.of_nat (N.size_nat n) + 1.
 Proof.
   destruct n, m; time_step.
 Qed.
@@ -495,58 +507,65 @@ Local Ltac size_simpl :=
     N.size_nat Pos.size_nat] in *.
 
 Lemma size_nat_pred_double (p : positive) :
-  Pos.size_nat (Pos.pred_double p) <= Pos.size_nat p + 1.
+  (Pos.size_nat (Pos.pred_double p) <= Pos.size_nat p + 1)%nat.
 Proof.
   induction p as [p IH | p IH |]; cbn [Pos.pred_double Pos.size_nat]; lia.
 Qed.
 
-Lemma size_nat_pred_N (p : positive) : N.size_nat (Pos.pred_N p) <= Pos.size_nat p.
+Lemma size_nat_pred_N (p : positive) :
+  (N.size_nat (Pos.pred_N p) <= Pos.size_nat p)%nat.
 Proof.
   destruct p as [p | p |]; size_simpl; try pose proof (size_nat_pred_double p); lia.
 Qed.
 
-Lemma size_nat_land (p q : positive) : N.size_nat (Pos.land p q) <= Pos.size_nat p.
+Lemma size_nat_land (p q : positive) :
+  (N.size_nat (Pos.land p q) <= Pos.size_nat p)%nat.
 Proof.
   revert q. induction p as [p IH | p IH |]; intros [q | q |]; size_simpl;
     try (specialize (IH q); destruct (Pos.land p q)); size_simpl; lia.
 Qed.
 
 Lemma size_nat_lor (p q : positive) :
-  Pos.size_nat (Pos.lor p q) <= Pos.size_nat p + Pos.size_nat q.
+  (Pos.size_nat (Pos.lor p q) <= Pos.size_nat p + Pos.size_nat q)%nat.
 Proof.
   revert q. induction p as [p IH | p IH |]; intros [q | q |]; size_simpl;
     try specialize (IH q); lia.
 Qed.
 
 Lemma size_nat_lxor (p q : positive) :
-  N.size_nat (Pos.lxor p q) <= Pos.size_nat p + Pos.size_nat q.
+  (N.size_nat (Pos.lxor p q) <= Pos.size_nat p + Pos.size_nat q)%nat.
 Proof.
   revert q. induction p as [p IH | p IH |]; intros [q | q |]; size_simpl;
     try (specialize (IH q); destruct (Pos.lxor p q)); size_simpl; lia.
 Qed.
 
-Lemma size_nat_ldiff (p q : positive) : N.size_nat (Pos.ldiff p q) <= Pos.size_nat p.
+Lemma size_nat_ldiff (p q : positive) :
+  (N.size_nat (Pos.ldiff p q) <= Pos.size_nat p)%nat.
 Proof.
   revert q. induction p as [p IH | p IH |]; intros [q | q |]; size_simpl;
     try (specialize (IH q); destruct (Pos.ldiff p q)); size_simpl; lia.
 Qed.
 
-Lemma size_nat_N_land (n m : N) : N.size_nat (N.land n m) <= N.size_nat n.
+Lemma size_nat_N_land (n m : N) :
+  (N.size_nat (N.land n m) <= N.size_nat n)%nat.
 Proof.
   destruct n as [| p], m as [| q]; cbn [N.land N.size_nat]; try lia. apply size_nat_land.
 Qed.
 
-Lemma size_nat_N_lor (n m : N) : N.size_nat (N.lor n m) <= N.size_nat n + N.size_nat m.
+Lemma size_nat_N_lor (n m : N) :
+  (N.size_nat (N.lor n m) <= N.size_nat n + N.size_nat m)%nat.
 Proof.
   destruct n as [| p], m as [| q]; cbn [N.lor N.size_nat]; try lia. apply size_nat_lor.
 Qed.
 
-Lemma size_nat_N_lxor (n m : N) : N.size_nat (N.lxor n m) <= N.size_nat n + N.size_nat m.
+Lemma size_nat_N_lxor (n m : N) :
+  (N.size_nat (N.lxor n m) <= N.size_nat n + N.size_nat m)%nat.
 Proof.
   destruct n as [| p], m as [| q]; cbn [N.lxor N.size_nat]; try lia. apply size_nat_lxor.
 Qed.
 
-Lemma size_nat_N_ldiff (n m : N) : N.size_nat (N.ldiff n m) <= N.size_nat n.
+Lemma size_nat_N_ldiff (n m : N) :
+  (N.size_nat (N.ldiff n m) <= N.size_nat n)%nat.
 Proof.
   destruct n as [| p], m as [| q]; cbn [N.ldiff N.size_nat]; try lia. apply size_nat_ldiff.
 Qed.
@@ -564,7 +583,7 @@ TimeFun Z.double Z.succ_double Z.pred_double Z.pos_sub Z.add Z.opp Z.sub Z.compa
 (** The bit length of the absolute value of an integer. *)
 Definition size_nat (z : Z) : nat :=
   match z with
-  | Z0 => 0
+  | Z0 => 0%nat
   | Zpos p => Pos.size_nat p
   | Zneg p => Pos.size_nat p
   end.
@@ -574,12 +593,12 @@ Proof.
   time_step.
 Qed.
 
-Lemma T_succ_double_le (z : Z) : T_succ_double z <= size_nat z + 1.
+Lemma T_succ_double_le (z : Z) : T_succ_double z <= N.of_nat (size_nat z) + 1.
 Proof.
   destruct z; time_step.
 Qed.
 
-Lemma T_pred_double_le (z : Z) : T_pred_double z <= size_nat z + 1.
+Lemma T_pred_double_le (z : Z) : T_pred_double z <= N.of_nat (size_nat z) + 1.
 Proof.
   destruct z; time_step.
 Qed.
@@ -588,28 +607,28 @@ Qed.
 Fixpoint trailing_zeros (p : positive) : nat :=
   match p with
   | xO p => S (trailing_zeros p)
-  | _ => 0
+  | _ => 0%nat
   end.
 
 (** The trailing zero bits of the absolute value of an integer. *)
 Definition trailing_zeros_z (z : Z) : nat :=
   match z with
-  | Z0 => 0
+  | Z0 => 0%nat
   | Zpos p => trailing_zeros p
   | Zneg p => trailing_zeros p
   end.
 
-Lemma trailing_zeros_lt (p : positive) : trailing_zeros p < Pos.size_nat p.
+Lemma trailing_zeros_lt (p : positive) : (trailing_zeros p < Pos.size_nat p)%nat.
 Proof.
   induction p as [p IH | p IH |]; cbn [trailing_zeros Pos.size_nat]; lia.
 Qed.
 
-Lemma trailing_zeros_pred_double (p : positive) : trailing_zeros (Pos.pred_double p) = 0.
+Lemma trailing_zeros_pred_double (p : positive) : trailing_zeros (Pos.pred_double p) = 0%nat.
 Proof.
   destruct p; reflexivity.
 Qed.
 
-Lemma T_pred_double_zeros (p : positive) : Pos.T_pred_double p <= trailing_zeros p + 1.
+Lemma T_pred_double_zeros (p : positive) : Pos.T_pred_double p <= N.of_nat (trailing_zeros p) + 1.
 Proof.
   induction p as [p IH | p IH |]; time_step.
 Qed.
@@ -618,7 +637,8 @@ Qed.
     decremented, [Pos.pred_double] walks the trailing zeros of the result so far.  Those zeros
     are paid by the potential [trailing_zeros_z], which grows by at most one per level. *)
 Lemma T_pos_sub_zeros (p q : positive) :
-  T_pos_sub p q + trailing_zeros_z (Z.pos_sub p q) <= 3 * (Pos.size_nat p + Pos.size_nat q).
+  T_pos_sub p q + N.of_nat (trailing_zeros_z (Z.pos_sub p q)) <=
+  3 * N.of_nat (Pos.size_nat p + Pos.size_nat q).
 Proof.
   revert q. induction p as [p IH | p IH |]; intros [q | q |];
     time_unfold T_pos_sub; cbn [Z.pos_sub Pos.size_nat];
@@ -632,12 +652,12 @@ Proof.
 Qed.
 
 Lemma T_pos_sub_le (p q : positive) :
-  T_pos_sub p q <= 3 * (Pos.size_nat p + Pos.size_nat q).
+  T_pos_sub p q <= 3 * N.of_nat (Pos.size_nat p + Pos.size_nat q).
 Proof.
   pose proof (T_pos_sub_zeros p q). lia.
 Qed.
 
-Lemma T_add_le (x y : Z) : T_add x y <= 3 * (size_nat x + size_nat y) + 1.
+Lemma T_add_le (x y : Z) : T_add x y <= 3 * N.of_nat (size_nat x + size_nat y) + 1.
 Proof.
   destruct x, y; time_step.
 Qed.
@@ -647,42 +667,44 @@ Proof.
   time_step.
 Qed.
 
-Lemma T_sub_le (x y : Z) : T_sub x y <= 3 * (size_nat x + size_nat y) + 3.
+Lemma T_sub_le (x y : Z) : T_sub x y <= 3 * N.of_nat (size_nat x + size_nat y) + 3.
 Proof.
   destruct x, y; time_step.
 Qed.
 
-Lemma T_compare_le (x y : Z) : T_compare x y <= size_nat x + 3.
+Lemma T_compare_le (x y : Z) : T_compare x y <= N.of_nat (size_nat x) + 3.
 Proof.
   destruct x, y; time_step.
 Qed.
 
-Lemma T_eqb_le (x y : Z) : T_eqb x y <= size_nat x + 1.
+Lemma T_eqb_le (x y : Z) : T_eqb x y <= N.of_nat (size_nat x) + 1.
 Proof.
   destruct x, y; time_step.
 Qed.
 
-Lemma T_leb_le (x y : Z) : T_leb x y <= size_nat x + 4.
+Lemma T_leb_le (x y : Z) : T_leb x y <= N.of_nat (size_nat x) + 4.
 Proof.
   time_step.
 Qed.
 
-Lemma T_ltb_le (x y : Z) : T_ltb x y <= size_nat x + 4.
+Lemma T_ltb_le (x y : Z) : T_ltb x y <= N.of_nat (size_nat x) + 4.
 Proof.
   time_step.
 Qed.
 
-Lemma T_min_le (x y : Z) : T_min x y <= size_nat x + 4.
+Lemma T_min_le (x y : Z) : T_min x y <= N.of_nat (size_nat x) + 4.
 Proof.
   time_step.
 Qed.
 
-Lemma T_max_le (x y : Z) : T_max x y <= size_nat x + 4.
+Lemma T_max_le (x y : Z) : T_max x y <= N.of_nat (size_nat x) + 4.
 Proof.
   time_step.
 Qed.
 
-Lemma T_mul_le (x y : Z) : T_mul x y <= (size_nat x + 1) * (size_nat x + 2 * size_nat y + 2).
+Lemma T_mul_le (x y : Z) :
+  T_mul x y <=
+  (N.of_nat (size_nat x) + 1) * (N.of_nat (size_nat x) + 2 * N.of_nat (size_nat y) + 2).
 Proof.
   destruct x, y; time_step.
 Qed.
@@ -700,24 +722,24 @@ Proof.
   destruct n; time_step.
 Qed.
 
-Lemma T_succ_le (x : Z) : T_succ x <= 3 * size_nat x + 5.
+Lemma T_succ_le (x : Z) : T_succ x <= 3 * N.of_nat (size_nat x) + 5.
 Proof.
   time_step.
 Qed.
 
-Lemma T_pred_le (x : Z) : T_pred x <= 3 * size_nat x + 5.
+Lemma T_pred_le (x : Z) : T_pred x <= 3 * N.of_nat (size_nat x) + 5.
 Proof.
   time_step.
 Qed.
 
-Lemma T_div2_le (x : Z) : T_div2 x <= size_nat x + 2.
+Lemma T_div2_le (x : Z) : T_div2 x <= N.of_nat (size_nat x) + 2.
 Proof.
   destruct x as [| [p | p |] | p]; time_step.
 Qed.
 
 (** * Bitwise operations *)
 
-Lemma T_land_le (x y : Z) : T_land x y <= 4 * (size_nat x + size_nat y) + 8.
+Lemma T_land_le (x y : Z) : T_land x y <= 4 * N.of_nat (size_nat x + size_nat y) + 8.
 Proof.
   destruct x as [| a | a], y as [| b | b]; time_unfold T_land; time_pose;
     try pose proof (N.size_nat_pred_N a); try pose proof (N.size_nat_pred_N b);
@@ -725,7 +747,7 @@ Proof.
     cbn [size_nat N.size_nat] in *; lia.
 Qed.
 
-Lemma T_lor_le (x y : Z) : T_lor x y <= 4 * (size_nat x + size_nat y) + 8.
+Lemma T_lor_le (x y : Z) : T_lor x y <= 4 * N.of_nat (size_nat x + size_nat y) + 8.
 Proof.
   destruct x as [| a | a], y as [| b | b]; time_unfold T_lor; time_pose;
     try pose proof (N.size_nat_pred_N a); try pose proof (N.size_nat_pred_N b);
@@ -735,7 +757,7 @@ Proof.
     cbn [size_nat N.size_nat] in *; lia.
 Qed.
 
-Lemma T_lxor_le (x y : Z) : T_lxor x y <= 4 * (size_nat x + size_nat y) + 8.
+Lemma T_lxor_le (x y : Z) : T_lxor x y <= 4 * N.of_nat (size_nat x + size_nat y) + 8.
 Proof.
   destruct x as [| a | a], y as [| b | b]; time_unfold T_lxor; time_pose;
     try pose proof (N.size_nat_pred_N a); try pose proof (N.size_nat_pred_N b);
@@ -753,12 +775,13 @@ Proof.
     time_unfold Pos.T_mul; time_unfold Pos.T_mul; cbn; lia.
 Qed.
 
-Lemma size_nat_succ (p : positive) : Pos.size_nat (Pos.succ p) <= Pos.size_nat p + 1.
+Lemma size_nat_succ (p : positive) :
+  (Pos.size_nat (Pos.succ p) <= Pos.size_nat p + 1)%nat.
 Proof.
   induction p as [p IH | p IH |]; cbn [Pos.succ Pos.size_nat]; lia.
 Qed.
 
-Lemma size_nat_div2 (x : Z) : size_nat (Z.div2 x) <= size_nat x.
+Lemma size_nat_div2 (x : Z) : (size_nat (Z.div2 x) <= size_nat x)%nat.
 Proof.
   destruct x as [| [p | p |] | [p | p |]]; cbn [Z.div2 Pos.div2 Pos.div2_up size_nat Pos.size_nat];
     try pose proof (size_nat_succ p); lia.
@@ -767,28 +790,29 @@ Qed.
 (** [Z.shiftl a n] calls [Z.mul 2] or [Z.div2] [|n|] times.  A halving of a negative number
     may carry through its bits, so a right shift of a negative [a] is bounded by the product of
     the bit length of [a] and the shift amount. *)
-Lemma T_shiftl_le (a n : Z) : T_shiftl a n <= (size_nat a + 5) * Z.abs_nat n + 1.
+Lemma T_shiftl_le (a n : Z) : T_shiftl a n <= (N.of_nat (size_nat a) + 5) * Z.abs_N n + 1.
 Proof.
-  time_unfold T_shiftl. destruct n as [| p | p]; cbn [Z.abs_nat]; [lia | |].
+  time_unfold T_shiftl. destruct n as [| p | p]; cbn [Z.abs_N]; [lia | |].
   - pose proof (Pos.T_iter_le (Z.mul 2) (fun x => T_mul 2 x) (fun _ => True) 3 a p
       (fun _ _ => I) (fun x _ => T_mul_two_le x) I). nia.
-  - pose proof (Pos.T_iter_le Z.div2 (fun x => T_div2 x) (fun x => size_nat x <= size_nat a)
-      (size_nat a + 2) a p) as Hiter.
-    assert (Hk : forall x, size_nat x <= size_nat a -> size_nat (Z.div2 x) <= size_nat a)
+  - pose proof (Pos.T_iter_le Z.div2 (fun x => T_div2 x)
+      (fun x => (size_nat x <= size_nat a)%nat) (N.of_nat (size_nat a) + 2) a p) as Hiter.
+    assert (Hk : forall x, (size_nat x <= size_nat a -> size_nat (Z.div2 x) <= size_nat a)%nat)
       by (intros x Hx; pose proof (size_nat_div2 x); lia).
-    assert (Hf : forall x, size_nat x <= size_nat a -> T_div2 x <= size_nat a + 2)
+    assert (Hf : forall x,
+        (size_nat x <= size_nat a)%nat -> T_div2 x <= N.of_nat (size_nat a) + 2)
       by (intros x Hx; pose proof (T_div2_le x); lia).
     specialize (Hiter Hk Hf (le_n _)). nia.
 Qed.
 
-Lemma T_shiftr_le (a n : Z) : T_shiftr a n <= (size_nat a + 5) * Z.abs_nat n + 3.
+Lemma T_shiftr_le (a n : Z) : T_shiftr a n <= (N.of_nat (size_nat a) + 5) * Z.abs_N n + 3.
 Proof.
   destruct n; time_step.
 Qed.
 
 (** * Division *)
 
-Lemma size_nat_mono (x y : Z) : (0 <= x <= y)%Z -> size_nat x <= size_nat y.
+Lemma size_nat_mono (x y : Z) : (0 <= x <= y)%Z -> (size_nat x <= size_nat y)%nat.
 Proof.
   intros [Hx Hxy]. destruct x as [| p | p], y as [| q | q]; cbn [size_nat]; try lia.
   destruct (proj1 (Pos.le_lteq p q) Hxy) as [Hlt | Heq].
@@ -796,12 +820,14 @@ Proof.
   - subst. lia.
 Qed.
 
-Lemma size_nat_double (x : Z) : (0 <= x)%Z -> size_nat (2 * x) <= size_nat x + 1.
+Lemma size_nat_double (x : Z) :
+  (0 <= x)%Z -> (size_nat (2 * x) <= size_nat x + 1)%nat.
 Proof.
   intros Hx. destruct x; cbn [Z.mul Pos.mul size_nat Pos.size_nat]; lia.
 Qed.
 
-Lemma size_nat_succ_double (x : Z) : (0 <= x)%Z -> size_nat (2 * x + 1) <= size_nat x + 1.
+Lemma size_nat_succ_double (x : Z) :
+  (0 <= x)%Z -> (size_nat (2 * x + 1) <= size_nat x + 1)%nat.
 Proof.
   intros Hx. destruct x; cbn [Z.mul Z.add Pos.mul Pos.add size_nat Pos.size_nat]; lia.
 Qed.
@@ -810,8 +836,8 @@ Qed.
 Lemma pos_div_eucl_sizes (a : positive) (b : Z) :
   (0 < b)%Z ->
   (0 <= fst (Z.pos_div_eucl a b))%Z /\ (0 <= snd (Z.pos_div_eucl a b))%Z /\
-  size_nat (fst (Z.pos_div_eucl a b)) <= Pos.size_nat a /\
-  size_nat (snd (Z.pos_div_eucl a b)) <= size_nat b.
+  (size_nat (fst (Z.pos_div_eucl a b)) <= Pos.size_nat a)%nat /\
+  (size_nat (snd (Z.pos_div_eucl a b)) <= size_nat b)%nat.
 Proof.
   intros Hb. pose proof (Z.pos_div_eucl_bound a b Hb) as Hr.
   pose proof (Z.pos_div_eucl_eq a b Hb) as Heq.
@@ -826,7 +852,8 @@ Qed.
     bit lengths of the partial quotient and remainder. *)
 Lemma T_pos_div_eucl_le (a : positive) (b : Z) :
   (0 < b)%Z ->
-  T_pos_div_eucl a b <= 16 * Pos.size_nat a * (Pos.size_nat a + size_nat b + 1).
+  T_pos_div_eucl a b <=
+  16 * N.of_nat (Pos.size_nat a) * (N.of_nat (Pos.size_nat a + size_nat b) + 1).
 Proof.
   intros Hb. induction a as [a IH | a IH |]; time_unfold T_pos_div_eucl;
     cbn [Pos.size_nat].
@@ -852,7 +879,7 @@ Qed.
 
 (** [Z.div_eucl] divides the absolute values and corrects the signs, which is linear. *)
 Lemma T_div_eucl_le (a b : Z) :
-  T_div_eucl a b <= 16 * (size_nat a + 1) * (size_nat a + size_nat b + 2).
+  T_div_eucl a b <= 16 * (N.of_nat (size_nat a) + 1) * (N.of_nat (size_nat a + size_nat b) + 2).
 Proof.
   destruct a as [| a | a], b as [| b | b]; time_unfold T_div_eucl; cbn [size_nat];
     try lia;
@@ -866,20 +893,21 @@ Proof.
 Qed.
 
 Lemma T_div_le (a b : Z) :
-  T_div a b <= 16 * (size_nat a + 1) * (size_nat a + size_nat b + 2) + 1.
+  T_div a b <= 16 * (N.of_nat (size_nat a) + 1) * (N.of_nat (size_nat a + size_nat b) + 2) + 1.
 Proof.
   time_step.
 Qed.
 
 Lemma T_modulo_le (a b : Z) :
-  T_modulo a b <= 16 * (size_nat a + 1) * (size_nat a + size_nat b + 2) + 1.
+  T_modulo a b <= 16 * (N.of_nat (size_nat a) + 1) * (N.of_nat (size_nat a + size_nat b) + 2) + 1.
 Proof.
   time_step.
 Qed.
 
 (** [Z.gcd] runs [Pos.gcd] on the absolute values, so it is quadratic. *)
 Lemma T_gcd_le (a b : Z) :
-  T_gcd a b <= (size_nat a + size_nat b + 2) * (2 * (size_nat a + size_nat b) + 3) + 2.
+  T_gcd a b <=
+  (N.of_nat (size_nat a + size_nat b) + 2) * (2 * N.of_nat (size_nat a + size_nat b) + 3) + 2.
 Proof.
   destruct a, b; time_step.
 Qed.
@@ -905,20 +933,20 @@ Context {A : Type} {R : A -> A -> Prop} (P : A -> Type).
     potential [Phi x], given that each recursive call on [y] costs [Phi y + 1] with the call of
     its closure, the whole recursion costs at most [Phi x]. *)
 Lemma T_Fix_F_le (F : forall x, (forall y, R y x -> P y) -> P x)
-    (T_F : forall x, (forall y, R y x -> P y) -> (forall y, R y x -> nat) -> nat)
-    (Phi : A -> nat) :
+    (T_F : forall x, (forall y, R y x -> P y) -> (forall y, R y x -> N) -> N)
+    (Phi : A -> N) :
   (forall x rec T_rec,
      (forall y h, T_rec y h <= Phi y + 1) -> T_F x rec T_rec + 1 <= Phi x) ->
   forall x (a : Acc R x), T_Fix_F P F T_F a <= Phi x.
 Proof.
   intros HF. fix IH 2. intros x [Hacc]. time_unfold @T_Fix_F. cbn [Acc_inv].
-  rewrite PeanoNat.Nat.add_comm. apply HF. intros y h. specialize (IH y (Hacc y h)). lia.
+  rewrite N.add_comm. apply HF. intros y h. specialize (IH y (Hacc y h)). lia.
 Qed.
 
 (** The potential lemma of [Fix], which adds one call to that of [Fix_F]. *)
 Lemma T_Fix_le (Rwf : well_founded R) (F : forall x, (forall y, R y x -> P y) -> P x)
-    (T_F : forall x, (forall y, R y x -> P y) -> (forall y, R y x -> nat) -> nat)
-    (Phi : A -> nat) :
+    (T_F : forall x, (forall y, R y x -> P y) -> (forall y, R y x -> N) -> N)
+    (Phi : A -> N) :
   (forall x rec T_rec,
      (forall y h, T_rec y h <= Phi y + 1) -> T_F x rec T_rec + 1 <= Phi x) ->
   forall x, T_Fix Rwf P F T_F x <= Phi x + 1.
@@ -931,22 +959,22 @@ Qed.
 Lemma T_Acc_rect_le
     (f : forall x, (forall y, R y x -> Acc R y) -> (forall y, R y x -> P y) -> P x)
     (T_f : forall x, (forall y, R y x -> Acc R y) -> (forall y, R y x -> P y) ->
-       (forall y, R y x -> nat) -> nat)
-    (Phi : A -> nat) :
+       (forall y, R y x -> N) -> N)
+    (Phi : A -> N) :
   (forall x acc rec T_rec,
      (forall y h, T_rec y h <= Phi y + 1) -> T_f x acc rec T_rec + 1 <= Phi x) ->
   forall x (a : Acc R x), T_Acc_rect P f T_f a <= Phi x.
 Proof.
   intros Hf. fix IH 2. intros x [Hacc]. time_unfold @T_Acc_rect.
-  rewrite PeanoNat.Nat.add_comm. apply Hf. intros y h. specialize (IH y (Hacc y h)). lia.
+  rewrite N.add_comm. apply Hf. intros y h. specialize (IH y (Hacc y h)). lia.
 Qed.
 
 (** The potential lemma of [well_founded_induction_type], whose step passes through one more
     closure than that of [Fix], so it must pay 2. *)
 Lemma T_well_founded_induction_type_le (Rwf : well_founded R)
     (F : forall x, (forall y, R y x -> P y) -> P x)
-    (T_F : forall x, (forall y, R y x -> P y) -> (forall y, R y x -> nat) -> nat)
-    (Phi : A -> nat) :
+    (T_F : forall x, (forall y, R y x -> P y) -> (forall y, R y x -> N) -> N)
+    (Phi : A -> N) :
   (forall x rec T_rec,
      (forall y h, T_rec y h <= Phi y + 1) -> T_F x rec T_rec + 2 <= Phi x) ->
   forall x, T_well_founded_induction_type Rwf P F T_F x <= Phi x + 1.

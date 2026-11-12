@@ -5,13 +5,14 @@
     time functions whose value is a numeral, and [time_step] unfolds one time function and then
     tries [nia].  [loop_bound] and [amortise] apply the potential lemmas of Loop and Amortised.
 
-    For example, on the goal [T_get p (set p v m) <= 5 * Pos.size_nat p] after [induction p],
+    For example, on the goal [T_get p (set p v m) <= 5 * N.of_nat (Pos.size_nat p)] after
+    [induction p],
     [time_step] unfolds [T_get] once, poses the induction hypothesis and the bounds of the
     callees, and closes the goal with [nia].
 
     Builds on: Time Loop Amortised *)
 
-From Stdlib Require Import PeanoNat Lia.
+From Stdlib Require Import Lia NArith.
 From elpi Require Import elpi.
 From Argent Require Import Time Loop Amortised.
 
@@ -34,8 +35,13 @@ strip-lams (fun _ _ B) [A|As] R :- !, strip-lams (B A) As R.
 strip-lams R [] R.
 
 pred numeral i:term.
-numeral {{ O }} :- !.
-numeral {{ S lp:N }} :- numeral N.
+numeral {{ N0 }} :- !.
+numeral {{ Npos lp:P }} :- pos-numeral P.
+
+pred pos-numeral i:term.
+pos-numeral {{ xH }} :- !.
+pos-numeral {{ xO lp:P }} :- !, pos-numeral P.
+pos-numeral {{ xI lp:P }} :- pos-numeral P.
 
 solve (goal _ _ Ty _ _ as G) GL :-
   ((pi h xs r\ copy (app [h|xs]) r :- const-app h xs r, !) =>
@@ -140,7 +146,7 @@ inst-ty (prod _ _ B) [X|Xs] C :- !, inst-ty (B X) Xs C.
 inst-ty C [] C.
 
 pred lhs i:term, o:term.
-lhs (app [global (indt Le), L, _]) L :- coq.locate "le" (indt Le).
+lhs T L :- time-le T L.
 
 % The quantified variables fixed by the left-hand side, followed only by premises.
 pred determined i:list term, o:list term.
@@ -180,35 +186,43 @@ Ltac time_cases :=
     [time_lin] replaces by fresh variables before it calls [lia]. *)
 
 (** A marker for a factor whose monotone consequences are already posed. *)
-Definition time_done (c : nat) : Prop := True.
+Definition time_done (c : N) : Prop := True.
 
-(** Succeed when [n] is a numeral of [nat].  The leading [idtac] makes the match run when the
+(** Succeed when [p] is a numeral of [positive]. *)
+Ltac time_pos_numeral p :=
+  lazymatch p with
+  | xH => idtac
+  | xO ?q => time_pos_numeral q
+  | xI ?q => time_pos_numeral q
+  end.
+
+(** Succeed when [n] is a numeral of [N].  The leading [idtac] makes the match run when the
     tactic runs, so that [assert_fails] catches its failure. *)
 Ltac time_numeral n :=
   idtac;
   lazymatch n with
-  | O => idtac
-  | S ?m => time_numeral m
+  | N0 => idtac
+  | Npos ?p => time_pos_numeral p
   end.
 
 (** Distribute products over sums in the goal and in every hypothesis. *)
 Ltac time_distribute :=
-  rewrite ?Nat.mul_add_distr_l, ?Nat.mul_add_distr_r, ?Nat.mul_succ_r, ?Nat.mul_1_r,
-    ?Nat.mul_1_l, ?Nat.mul_0_r, ?Nat.mul_0_l, ?Nat.add_0_l, ?Nat.add_0_r in *.
+  rewrite ?N.mul_add_distr_l, ?N.mul_add_distr_r, ?N.mul_succ_r, ?N.mul_1_r,
+    ?N.mul_1_l, ?N.mul_0_r, ?N.mul_0_l, ?N.add_0_l, ?N.add_0_r in *.
 
 (** Add [c * a <= c * b] for each hypothesis [a <= b] or [a < b] that mentions no product by
     [c].  The new hypotheses mention a product by [c], so this runs one round. *)
 Ltac time_mono_with c :=
   repeat
     match goal with
-    | H : ?a <= ?b |- _ =>
-      assert_fails (idtac; match type of H with context [(c * _)%nat] => idtac end);
-      assert_fails (idtac; match goal with _ : (c * a <= c * b)%nat |- _ => idtac end);
-      pose proof (Nat.mul_le_mono_l a b c H)
-    | H : ?a < ?b |- _ =>
-      assert_fails (idtac; match type of H with context [(c * _)%nat] => idtac end);
-      assert_fails (idtac; match goal with _ : (c * a <= c * b)%nat |- _ => idtac end);
-      pose proof (Nat.mul_le_mono_l a b c (Nat.lt_le_incl a b H))
+    | H : (?a <= ?b)%N |- _ =>
+      assert_fails (idtac; match type of H with context [(c * _)%N] => idtac end);
+      assert_fails (idtac; match goal with _ : (c * a <= c * b)%N |- _ => idtac end);
+      pose proof (N.mul_le_mono_l a b c H)
+    | H : (?a < ?b)%N |- _ =>
+      assert_fails (idtac; match type of H with context [(c * _)%N] => idtac end);
+      assert_fails (idtac; match goal with _ : (c * a <= c * b)%N |- _ => idtac end);
+      pose proof (N.mul_le_mono_l a b c (N.lt_le_incl a b H))
     end.
 
 (** Run [time_mono_with] once for every abstract constant [c], such as a [Parameter] of a
@@ -218,11 +232,11 @@ Ltac time_mono_with c :=
 Ltac time_mono :=
   repeat
     match goal with
-    | |- context [(?c * _)%nat] =>
+    | |- context [(?c * _)%N] =>
       is_const c;
       assert_fails (idtac; match goal with _ : time_done c |- _ => idtac end);
       time_mono_with c; assert (time_done c) by exact I
-    | _ : context [(?c * _)%nat] |- _ =>
+    | _ : context [(?c * _)%N] |- _ =>
       is_const c;
       assert_fails (idtac; match goal with _ : time_done c |- _ => idtac end);
       time_mono_with c; assert (time_done c) by exact I
@@ -233,21 +247,21 @@ Ltac time_mono :=
 Ltac time_generalise :=
   repeat
     match goal with
-    | |- context [(?x * ?y)%nat] =>
+    | |- context [(?x * ?y)%N] =>
       assert_fails (idtac; time_numeral x); assert_fails (idtac; time_numeral y);
       let v := fresh "time_prod" in
-      set (v := (x * y)%nat) in *; clearbody v
-    | _ : context [(?x * ?y)%nat] |- _ =>
+      set (v := (x * y)%N) in *; clearbody v
+    | _ : context [(?x * ?y)%N] |- _ =>
       assert_fails (idtac; time_numeral x); assert_fails (idtac; time_numeral y);
       let v := fresh "time_prod" in
-      set (v := (x * y)%nat) in *; clearbody v
+      set (v := (x * y)%N) in *; clearbody v
     end.
 
 (** Succeed when an abstract constant multiplies a term of the goal or of a hypothesis. *)
 Ltac time_has_const :=
   match goal with
-  | |- context [(?c * _)%nat] => is_const c
-  | _ : context [(?c * _)%nat] |- _ => is_const c
+  | |- context [(?c * _)%N] => is_const c
+  | _ : context [(?c * _)%N] |- _ => is_const c
   end.
 
 (** Close a goal that is linear over products, or fail and leave the goal as it was.  It runs
@@ -255,12 +269,29 @@ Ltac time_has_const :=
 Ltac time_lin :=
   solve [time_has_const; time_distribute; time_mono; time_distribute; time_generalise; lia].
 
+(** A size enters a bound as [N.of_nat] of a [nat], and [cbn] turns the size of a constructor,
+    such as [length (x :: l)], into a successor [S (length l)]. *)
+Lemma time_of_nat_succ (n : nat) : N.of_nat (S n) = (N.of_nat n + 1)%N.
+Proof.
+  lia.
+Qed.
+
+(** Compute the specification functions in the goal.  [N.add] and [N.mul] stay folded, because
+    [cbn] would turn [1 + t] into a match on [t] that [lia] cannot read.  [N.of_nat] stays
+    folded too, so that [N.of_nat (S n)] becomes [N.of_nat n + 1] and not a positive literal
+    over [Pos.of_succ_nat n]. *)
+Ltac time_cbn := cbn -[N.add N.mul N.of_nat]; rewrite ?time_of_nat_succ.
+
+(** [time_cbn] in the goal and in every hypothesis. *)
+Ltac time_cbn_all := cbn -[N.add N.mul N.of_nat] in *; rewrite ?time_of_nat_succ in *.
+
 (** On the goal [t], which unfolds one time function of the original goal by one step: simplify,
     compute the specification functions, pose the callee bounds and try [time_lin] and then
     [nia], first as is and then after case analysis on the remaining matches. *)
 Ltac time_step_rest t :=
-  time_change t; time_simpl; cbn; elpi time_pose; cbn in *; try first [time_lin | nia];
-  try (time_cases; elpi time_pose; cbn in *; first [time_lin | nia]).
+  time_change t; time_simpl; time_cbn; elpi time_pose; time_cbn_all;
+  try first [time_lin | nia];
+  try (time_cases; elpi time_pose; time_cbn_all; first [time_lin | nia]).
 
 Elpi Tactic time_step.
 Elpi Accumulate Db argent.time.db.
@@ -280,7 +311,7 @@ solve (goal _ _ _ _ [trm F] as G) GL :- !, head-gref F GR,
   (lookup GR TG, ! ; coq.ltac.fail _ "time_step: no time function for" {coq.term->string F}),
   step TG G GL.
 solve (goal _ _ Ty _ [] as G) GL :-
-  coq.locate "le" (indt Le), Ty = app [global (indt Le), L, _], !,
+  time-le Ty L, !,
   (first-time L TG, ! ; coq.ltac.fail _ "time_step: no time function in the left-hand side"),
   step TG G GL.
 solve _ _ :- coq.ltac.fail _ "time_step: the goal must have the form T_f args <= bound".
@@ -301,7 +332,7 @@ Tactic Notation "time_pose" := elpi time_pose.
     continue obligation, the stop obligation and [Inv s], and tries [lia] on the remaining
     arithmetic. *)
 Ltac loop_bound Inv Phi Tstop :=
-  eapply PeanoNat.Nat.le_trans;
+  eapply N.le_trans;
   [ first
       [ eapply (T_loop_le _ _ _ Inv Phi Tstop)
       | eapply (T_loop_fuel_le _ _ Inv Phi Tstop) ]
@@ -309,8 +340,8 @@ Ltac loop_bound Inv Phi Tstop :=
 
 (** On a goal [total op T os s <= e], apply [amortised_uniform] with the invariant [Inv], the
     potential [Phi], the amortised cost [A] and its cap [k].  It leaves [amortised], the cap
-    [A o s <= k], [Inv s] and the arithmetic goal [k * length os + Phi s <= e], after trying
-    [lia] on the last. *)
+    [A o s <= k], [Inv s] and the arithmetic goal [k * N.of_nat (length os) + Phi s <= e], after
+    trying [lia] on the last. *)
 Ltac amortise Inv Phi A k :=
-  eapply PeanoNat.Nat.le_trans;
+  eapply N.le_trans;
   [ eapply (amortised_uniform _ _ A Phi Inv k) | try lia ].
