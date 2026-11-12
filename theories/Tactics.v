@@ -12,7 +12,7 @@
 
     Builds on: Time Loop Amortised *)
 
-From Stdlib Require Import Lia NArith.
+From Stdlib Require Import PeanoNat Lia NArith.
 From elpi Require Import elpi.
 From Argent Require Import Time Loop Amortised.
 
@@ -210,8 +210,15 @@ Ltac time_distribute :=
   rewrite ?N.mul_add_distr_l, ?N.mul_add_distr_r, ?N.mul_succ_r, ?N.mul_1_r,
     ?N.mul_1_l, ?N.mul_0_r, ?N.mul_0_l, ?N.add_0_l, ?N.add_0_r in *.
 
-(** Add [c * a <= c * b] for each hypothesis [a <= b] or [a < b] that mentions no product by
-    [c].  The new hypotheses mention a product by [c], so this runs one round. *)
+(** [N.of_nat] is monotone, so a hypothesis on sizes of type [nat] gives one on [N]. *)
+Lemma time_of_nat_le (a b : nat) : (a <= b)%nat -> (N.of_nat a <= N.of_nat b)%N.
+Proof.
+  lia.
+Qed.
+
+(** Add [c * a <= c * b] for each hypothesis [a <= b] or [a < b] on [N] that mentions no
+    product by [c], and [c * N.of_nat a <= c * N.of_nat b] for each such hypothesis on sizes of
+    type [nat].  The new hypotheses mention a product by [c], so this runs one round. *)
 Ltac time_mono_with c :=
   repeat
     match goal with
@@ -223,6 +230,14 @@ Ltac time_mono_with c :=
       assert_fails (idtac; match type of H with context [(c * _)%N] => idtac end);
       assert_fails (idtac; match goal with _ : (c * a <= c * b)%N |- _ => idtac end);
       pose proof (N.mul_le_mono_l a b c (N.lt_le_incl a b H))
+    | H : (?a <= ?b)%nat |- _ =>
+      assert_fails (idtac;
+        match goal with _ : (c * N.of_nat a <= c * N.of_nat b)%N |- _ => idtac end);
+      pose proof (N.mul_le_mono_l _ _ c (time_of_nat_le a b H))
+    | H : (?a < ?b)%nat |- _ =>
+      assert_fails (idtac;
+        match goal with _ : (c * N.of_nat a <= c * N.of_nat b)%N |- _ => idtac end);
+      pose proof (N.mul_le_mono_l _ _ c (time_of_nat_le a b (Nat.lt_le_incl a b H)))
     end.
 
 (** Run [time_mono_with] once for every abstract constant [c], such as a [Parameter] of a
