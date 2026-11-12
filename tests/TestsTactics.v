@@ -64,6 +64,18 @@ Proof.
   time_unfold @Datatypes.T_length. reflexivity.
 Qed.
 
+(** [time_cbn] computes the length of a cons, turns [N.of_nat] of the successor into a sum, and
+    leaves [1 + t] and the length of a variable folded. *)
+Example cbn_size (x : nat) (l : list nat) (t : N) :
+  (1 + t <= N.of_nat (length (x :: l)) + t)%N.
+Proof.
+  time_cbn.
+  lazymatch goal with
+  | |- (1 + t <= N.of_nat (length l) + 1 + t)%N => idtac
+  end.
+  lia.
+Qed.
+
 (** [time_step] on a goal with no time function fails with a message. *)
 Example step_needs_time_function : (1 <= 2)%N.
 Proof.
