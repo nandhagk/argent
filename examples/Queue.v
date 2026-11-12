@@ -11,7 +11,7 @@
 
     Builds on: Time Tactics Amortised Std *)
 
-From Stdlib Require Import List Lia.
+From Stdlib Require Import List Lia NArith.
 From Argent Require Import Time Tactics Amortised Std.
 Import List.ListNotations.
 
@@ -58,7 +58,7 @@ TimeFun push pop step.
 (** * Amortised bound *)
 
 (** The potential: every element of the back list has paid for its share of a reversal. *)
-Definition back_length {A : Type} (q : queue A) : nat := length (snd q).
+Definition back_length {A : Type} (q : queue A) : N := N.of_nat (length (snd q)).
 
 Lemma rev_append_nil_length {A : Type} (b : list A) : length (rev_append b []) = length b.
 Proof.
@@ -67,25 +67,25 @@ Qed.
 
 (** Every operation costs at most 4 plus the decrease of the potential. *)
 Theorem step_amortised {A : Type} :
-  amortised (@step A) T_step (fun _ _ => 4) back_length (fun _ => True).
+  amortised (@step A) T_step (fun _ _ => 4%N) back_length (fun _ => True).
 Proof.
-  intros o [f b] _. split; [exact I |].
-  destruct o as [x |]; time_unfold @T_step; cbn [step back_length snd].
-  - time_unfold @T_push. cbn. lia.
-  - time_unfold @T_pop. destruct f as [| y f]; cbn.
+  intros o [f b] _. split; [exact I |]. unfold back_length.
+  destruct o as [x |]; time_unfold @T_step; cbn [step snd].
+  - time_unfold @T_push. time_cbn. lia.
+  - time_unfold @T_pop. destruct f as [| y f]; time_cbn.
     + pose proof (List.T_rev_append_le b []) as Hrev.
       pose proof (rev_append_nil_length b) as Hlen.
-      destruct (rev_append b []) as [| y f]; cbn in *; lia.
+      destruct (rev_append b []) as [| y f]; time_cbn_all; lia.
     + lia.
 Qed.
 
 (** A sequence of [n] operations from the empty queue costs at most [4 * n]. *)
 Theorem queue_total {A : Type} (os : list (op A)) :
-  total (@step A) T_step os empty <= 4 * length os.
+  (total (@step A) T_step os empty <= 4 * N.of_nat (length os))%N.
 Proof.
-  amortise (fun _ : queue A => True) (@back_length A) (fun (_ : op A) (_ : queue A) => 4) 4.
+  amortise (fun _ : queue A => True) (@back_length A) (fun (_ : op A) (_ : queue A) => 4%N) 4%N.
   - exact step_amortised.
   - intros _ _ _. lia.
   - exact I.
-  - cbn. lia.
+  - unfold back_length. time_cbn. lia.
 Qed.

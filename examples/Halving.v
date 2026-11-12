@@ -8,7 +8,8 @@
     [Acc_intro_generator] unfolds the accessibility proof lazily, so both functions run under
     [vm_compute].
 
-    For example, [log2 1000] is 9, and its time is at most [4 * N.size_nat 1000 + 4].
+    For example, [log2 1000] is 9, and its time is at most
+    [4 * N.of_nat (N.size_nat 1000) + 4].
 
     Builds on: Time Tactics Std *)
 
@@ -53,13 +54,16 @@ Proof.
   destruct q; cbn [N.div2 N.size_nat Pos.size_nat]; lia.
 Qed.
 
+Local Open Scope N_scope.
+
 (** Each step costs at most 3 besides its recursive call, which pays 4 per bit. *)
-Theorem T_log2_le (x : N) : T_log2 x <= 4 * N.size_nat x + 4.
+Theorem T_log2_le (x : N) : T_log2 x <= 4 * N.of_nat (N.size_nat x) + 4.
 Proof.
   time_unfold @T_log2.
   enough (Hfix : Wf.T_Fix (Acc_intro_generator 64 N.lt_wf_0) (fun _ => nat) log2_step
-    (fun x rec T_rec => T_log2_step x rec T_rec) x <= 4 * N.size_nat x + 2 + 1) by lia.
-  apply (Wf.T_Fix_le (fun _ => nat) _ _ _ (fun x => 4 * N.size_nat x + 2)).
+    (fun x rec T_rec => T_log2_step x rec T_rec) x <= 4 * N.of_nat (N.size_nat x) + 2 + 1)
+    by lia.
+  apply (Wf.T_Fix_le (fun _ => nat) _ _ _ (fun x => 4 * N.of_nat (N.size_nat x) + 2)).
   intros y rec T_rec Hrec. time_unfold T_log2_step.
   destruct y as [| q]; cbn [N.size_nat]; [lia |].
   destruct q as [q | q |]; cbn [Pos.size_nat]; [| | lia];
@@ -96,18 +100,18 @@ Definition halves (x : N) : tree :=
 TimeFun halves.
 
 (** The potential of [halves]: [8 x - 6] pays two calls on [x / 2] and a constant. *)
-Definition halves_phi (x : N) : nat :=
+Definition halves_phi (x : N) : N :=
   match x with
   | N0 => 2
-  | N.pos p => 8 * Pos.to_nat p - 6
+  | N.pos p => 8 * N.pos p - 6
   end.
 
-Theorem T_halves_le (x : N) : T_halves x <= 8 * N.to_nat x + 4.
+Theorem T_halves_le (x : N) : T_halves x <= 8 * x + 4.
 Proof.
   time_unfold @T_halves.
   enough (Hfix : Wf.T_Fix (Acc_intro_generator 64 N.lt_wf_0) (fun _ => tree) halves_step
     (fun x rec T_rec => T_halves_step x rec T_rec) x <= halves_phi x + 1).
-  { destruct x as [| p]; cbn [halves_phi N.to_nat] in *; lia. }
+  { destruct x as [| p]; cbn [halves_phi] in *; lia. }
   apply (Wf.T_Fix_le (fun _ => tree) _ _ _ halves_phi).
   intros y rec T_rec Hrec. time_unfold T_halves_step.
   destruct y as [| q]; cbn [halves_phi]; [lia |].
@@ -116,6 +120,5 @@ Proof.
     | |- context [T_rec ?z ?h] => pose proof (Hrec z h)
     end;
     pose proof (N.T_div2_le (N.pos q~1)); pose proof (N.T_div2_le (N.pos q~0));
-    pose proof (Pos2Nat.is_pos q);
-    cbn [N.div2 halves_phi] in *; rewrite ?Pos2Nat.inj_xI, ?Pos2Nat.inj_xO in *; lia.
+    cbn [N.div2 halves_phi] in *; lia.
 Qed.

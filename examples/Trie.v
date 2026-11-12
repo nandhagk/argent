@@ -10,8 +10,10 @@
 
     Builds on: Time Tactics BigO Std *)
 
-From Stdlib Require Import PArith Lia.
+From Stdlib Require Import PArith NArith Lia.
 From Argent Require Import Time Tactics BigO Std.
+
+Local Open Scope N_scope.
 
 (** * The trie and its operations *)
 
@@ -93,27 +95,29 @@ Qed.
 (** * Bounds *)
 
 (** [get] visits at most one node per bit of the key. *)
-Theorem T_get_le {A : Type} (p : positive) (m : t A) : T_get p m <= Pos.size_nat p.
+Theorem T_get_le {A : Type} (p : positive) (m : t A) :
+  T_get p m <= N.of_nat (Pos.size_nat p).
 Proof.
   revert m. induction p as [p IH | p IH |]; intros [| l o r]; time_step.
 Qed.
 
 (** [set] visits exactly one node per bit of the key. *)
-Theorem T_set_le {A : Type} (p : positive) (v : A) (m : t A) : T_set p v m <= Pos.size_nat p.
+Theorem T_set_le {A : Type} (p : positive) (v : A) (m : t A) :
+  T_set p v m <= N.of_nat (Pos.size_nat p).
 Proof.
   revert m. induction p as [p IH | p IH |]; intros [| l o r]; time_step.
 Qed.
 
 (** [remove] visits at most one node per bit and rebuilds each with [node]. *)
 Theorem T_remove_le {A : Type} (p : positive) (m : t A) :
-  T_remove p m <= 2 * Pos.size_nat p.
+  T_remove p m <= 2 * N.of_nat (Pos.size_nat p).
 Proof.
   revert m. induction p as [p IH | p IH |]; intros [| l o r]; time_step.
 Qed.
 
 (** On a trie that holds the key, [get] visits one node per bit of the key. *)
 Theorem T_get_ge {A : Type} (p : positive) (v : A) (m : t A) :
-  Pos.size_nat p <= T_get p (set p v m).
+  N.of_nat (Pos.size_nat p) <= T_get p (set p v m).
 Proof.
   revert m. induction p as [p IH | p IH |]; intros [| l o r]; cbn [set];
     time_unfold @T_get; cbn [Pos.size_nat]; try pose proof (IH Leaf);
@@ -124,32 +128,33 @@ Qed.
 
 (** [get] runs in time O(bit length of the key). *)
 Theorem get_bigO {A : Type} :
-  bigO (fun _ => True) (fun x : positive * t A => Pos.size_nat (fst x))
+  bigO (fun _ => True) (fun x : positive * t A => N.of_nat (Pos.size_nat (fst x)))
     (fun x => T_get (fst x) (snd x)).
 Proof.
-  apply bigO_intro with (c := 1). intros [p m] _. pose proof (T_get_le p m). cbn. lia.
+  apply bigO_intro with (c := 1). intros [p m] _. pose proof (T_get_le p m). cbn [fst snd]. lia.
 Qed.
 
 (** [set] runs in time O(bit length of the key). *)
 Theorem set_bigO {A : Type} :
-  bigO (fun _ => True) (fun x : positive * A * t A => Pos.size_nat (fst (fst x)))
+  bigO (fun _ => True) (fun x : positive * A * t A => N.of_nat (Pos.size_nat (fst (fst x))))
     (fun x => T_set (fst (fst x)) (snd (fst x)) (snd x)).
 Proof.
-  apply bigO_intro with (c := 1). intros [[p v] m] _. pose proof (T_set_le p v m). cbn. lia.
+  apply bigO_intro with (c := 1). intros [[p v] m] _. pose proof (T_set_le p v m).
+  cbn [fst snd]. lia.
 Qed.
 
 (** [remove] runs in time O(bit length of the key). *)
 Theorem remove_bigO {A : Type} :
-  bigO (fun _ => True) (fun x : positive * t A => Pos.size_nat (fst x))
+  bigO (fun _ => True) (fun x : positive * t A => N.of_nat (Pos.size_nat (fst x)))
     (fun x => T_remove (fst x) (snd x)).
 Proof.
-  apply bigO_intro with (c := 2). intros [p m] _. pose proof (T_remove_le p m). cbn. lia.
+  apply bigO_intro with (c := 2). intros [p m] _. pose proof (T_remove_le p m). cbn [fst snd]. lia.
 Qed.
 
 (** The key [1~1~...~1] with [n] ones after the leading bit. *)
 Fixpoint ones (n : nat) : positive :=
   match n with
-  | 0 => xH
+  | O => xH
   | S k => xI (ones k)
   end.
 
@@ -161,12 +166,13 @@ Qed.
 (** The bound of [get] is tight: on tries that hold the key, [get] takes time proportional to
     the bit length of the key. *)
 Theorem get_tight {A : Type} (a : A) :
-  tight (fun _ => True) (fun x : positive * t A => Pos.size_nat (fst x))
+  tight (fun _ => True) (fun x : positive * t A => N.of_nat (Pos.size_nat (fst x)))
     (fun x => T_get (fst x) (snd x)).
 Proof.
-  apply tight_intro with (c := 1) (w := fun n => (ones n, set (ones n) a Leaf)).
+  apply tight_intro with (c := 1)
+    (w := fun n => (ones (N.to_nat n), set (ones (N.to_nat n)) a Leaf)).
   - exact get_bigO.
   - intros n. exact I.
   - intros n. cbn [fst]. rewrite size_nat_ones. lia.
-  - intros n. cbn [fst snd]. pose proof (T_get_ge (ones n) a Leaf). lia.
+  - intros n. cbn [fst snd]. pose proof (T_get_ge (ones (N.to_nat n)) a Leaf). lia.
 Qed.

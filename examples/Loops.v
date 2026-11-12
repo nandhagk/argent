@@ -9,7 +9,7 @@
 
     Builds on: Time Tactics Loop Std *)
 
-From Stdlib Require Import List Lia Wf_nat.
+From Stdlib Require Import List Lia NArith Wf_nat.
 From Argent Require Import Time Tactics Loop Std.
 Import List.ListNotations.
 
@@ -35,13 +35,13 @@ Proof.
 Qed.
 
 (** The countdown from [n] costs at most [2 * n + 3]: each step pays 2 from the potential. *)
-Theorem T_countdown_le (n : nat) : T_countdown n <= 2 * n + 3.
+Theorem T_countdown_le (n : nat) : (T_countdown n <= 2 * N.of_nat n + 3)%N.
 Proof.
   time_unfold @T_countdown.
   match goal with
-  | |- 1 + ?t <= _ => enough (Hloop : t <= 2 * n + 1 + 1) by lia
+  | |- (1 + ?t <= _)%N => enough (Hloop : (t <= 2 * N.of_nat n + 1 + 1)%N) by lia
   end.
-  loop_bound (fun _ : nat => True) (fun k : nat => 2 * k) 1.
+  loop_bound (fun _ : nat => True) (fun k : nat => (2 * N.of_nat k)%N) 1%N.
   - intros [| k] s1 Hlt _ Hstep; cbn in Hstep; [discriminate |].
     injection Hstep as Hs1. subst s1. split; [exact I |]. time_simpl. lia.
   - intros s r _ _. time_simpl. lia.
@@ -68,18 +68,19 @@ TimeFun count.
 Example count_runs : count [5; 6; 7] = inr 3 := eq_refl.
 
 (** Counting a list costs at most [4 * length l + 5], including the computation of the fuel. *)
-Theorem T_count_le (l : list nat) : T_count l <= 4 * length l + 5.
+Theorem T_count_le (l : list nat) : (T_count l <= 4 * N.of_nat (length l) + 5)%N.
 Proof.
   time_unfold @T_count. pose proof (Datatypes.T_length_le l) as Hlen.
   pose proof (Nat.T_add_le (length l) 1) as Hadd.
   match goal with
-  | |- 1 + (_ + _ + ?t) <= _ => enough (Hloop : t <= 2 * length l + 1 + 1) by lia
+  | |- (1 + (_ + _ + ?t) <= _)%N =>
+    enough (Hloop : (t <= 2 * N.of_nat (length l) + 1 + 1)%N) by lia
   end.
   loop_bound (fun _ : nat * list nat => True)
-    (fun s : nat * list nat => 2 * length (snd s)) 1.
+    (fun s : nat * list nat => (2 * N.of_nat (length (snd s)))%N) 1%N.
   - intros [c [| x r]] s1 _ Hstep; cbn in Hstep; [discriminate |].
-    injection Hstep as Hs1. subst s1. split; [exact I |]. time_simpl. cbn. lia.
+    injection Hstep as Hs1. subst s1. split; [exact I |]. time_simpl. time_cbn. lia.
   - intros s r _ _. time_simpl. lia.
   - exact I.
-  - cbn. lia.
+  - time_cbn. lia.
 Qed.

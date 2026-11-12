@@ -12,7 +12,7 @@
 
     Builds on: Time Tactics Std Trie *)
 
-From Stdlib Require Import List PArith Lia.
+From Stdlib Require Import List PArith NArith Lia.
 From Argent Require Import Time Tactics Std.
 From Argent.Examples Require Trie.
 Import List.ListNotations.
@@ -24,9 +24,10 @@ Module Type KEY.
   Parameter encode : t -> positive.
   Parameter encode_inj : forall a b, encode a = encode b -> a = b.
   (* Time layer. *)
-  Parameter T_encode : t -> nat.
-  Parameter c_encode : nat.
-  Parameter T_encode_le : forall k, T_encode k <= c_encode * (Pos.size_nat (encode k) + 1).
+  Parameter T_encode : t -> N.
+  Parameter c_encode : N.
+  Parameter T_encode_le :
+    forall k, (T_encode k <= c_encode * (N.of_nat (Pos.size_nat (encode k)) + 1))%N.
 End KEY.
 
 Module Type MAP.
@@ -39,13 +40,14 @@ Module Type MAP.
   Parameter get_set_same : forall A k (v : A) m, get k (set k v m) = Some v.
   Parameter get_set_other : forall A k k' (v : A) m, k <> k' -> get k' (set k v m) = get k' m.
   (* Time layer. *)
-  Parameter T_get : forall {A : Type}, K.t -> t A -> nat.
-  Parameter T_set : forall {A : Type}, K.t -> A -> t A -> nat.
-  Parameter c_map : nat.
+  Parameter T_get : forall {A : Type}, K.t -> t A -> N.
+  Parameter T_set : forall {A : Type}, K.t -> A -> t A -> N.
+  Parameter c_map : N.
   Parameter T_get_le :
-    forall A k (m : t A), T_get k m <= c_map * (Pos.size_nat (K.encode k) + 1).
+    forall A k (m : t A), (T_get k m <= c_map * (N.of_nat (Pos.size_nat (K.encode k)) + 1))%N.
   Parameter T_set_le :
-    forall A k (v : A) m, T_set k v m <= c_map * (Pos.size_nat (K.encode k) + 1).
+    forall A k (v : A) m,
+      (T_set k v m <= c_map * (N.of_nat (Pos.size_nat (K.encode k)) + 1))%N.
 End MAP.
 
 (** * A map on tries *)
@@ -78,14 +80,16 @@ Module TrieMap (K0 : KEY) <: MAP with Module K := K0.
     intros Hne. apply Trie.get_set_other. intros Heq. apply Hne, K.encode_inj, Heq.
   Qed.
 
-  Definition c_map : nat := K.c_encode + 2.
+  Definition c_map : N := (K.c_encode + 2)%N.
 
-  Lemma T_get_le A k (m : t A) : T_get k m <= c_map * (Pos.size_nat (K.encode k) + 1).
+  Lemma T_get_le A k (m : t A) :
+    (T_get k m <= c_map * (N.of_nat (Pos.size_nat (K.encode k)) + 1))%N.
   Proof.
     unfold c_map. time_step.
   Qed.
 
-  Lemma T_set_le A k (v : A) m : T_set k v m <= c_map * (Pos.size_nat (K.encode k) + 1).
+  Lemma T_set_le A k (v : A) m :
+    (T_set k v m <= c_map * (N.of_nat (Pos.size_nat (K.encode k)) + 1))%N.
   Proof.
     unfold c_map. time_step.
   Qed.
@@ -113,9 +117,9 @@ Module NatKey <: KEY.
     - f_equal. apply IH. congruence.
   Qed.
 
-  Definition c_encode : nat := 1.
+  Definition c_encode : N := 1%N.
 
-  Lemma T_encode_le k : T_encode k <= c_encode * (Pos.size_nat (encode k) + 1).
+  Lemma T_encode_le k : (T_encode k <= c_encode * (N.of_nat (Pos.size_nat (encode k)) + 1))%N.
   Proof.
     unfold c_encode. induction k as [| k IH]; time_step.
   Qed.
@@ -150,7 +154,8 @@ Module SumValues (M : MAP).
   (** The time of [sum_values] is linear in the encoded key lengths and in the values added,
       since addition on [nat] is unary.  The proof uses only the contracts of [MAP]. *)
   Theorem T_sum_values_le (ks : list M.K.t) (m : M.t nat) :
-    T_sum_values ks m <= (M.c_map + 2) * key_work ks + sum_values ks m + 1.
+    (T_sum_values ks m <=
+     (M.c_map + 2) * N.of_nat (key_work ks) + N.of_nat (sum_values ks m) + 1)%N.
   Proof.
     induction ks as [| k r IH]; time_step.
   Qed.
