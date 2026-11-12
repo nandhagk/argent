@@ -5,11 +5,10 @@
     call-by-value evaluation of [f]: one per call of a defined function or closure body.  The
     count is a binary number of type [N].
 
-    For example, [TimeFun length.] defines
-    [T_length = fun A => fix T_length l := 1 + match l with [] => 0 | _ :: l' => T_length l' end]
-    in [N_scope].
+    For example, [TimeFun length.] defines [T_length] as
+    [fun A => fix T_length l := (1 + match l with [] => 0 | _ :: l' => T_length l' end)%N].
 
-    Builds on: rocq-elpi, Stdlib NArith *)
+    Builds on: Stdlib NArith, rocq-elpi *)
 
 From Stdlib Require Import NArith.
 From elpi Require Import elpi.
@@ -929,8 +928,8 @@ audit-one G _ :- err "E_AUDIT" {calc ("TimeAudit: " ^ {gstr G} ^
 Elpi Export TimeAudit.
 
 (** [TimePrim c := (e)] declares the cost [e] of a built-in constant [c], whose type is the time
-    type of [c]; [TimePrim c := n] declares a constant cost [n].  It is the only way to declare a
-    cost by hand. *)
+    type of [c]; [TimePrim c := n] declares a constant cost [n], as a literal of type [N].  It is
+    the only way to declare a cost by hand. *)
 
 Elpi Command TimePrim.
 Elpi Accumulate Db argent.time.db.
@@ -1050,8 +1049,8 @@ recursive (mfix _ _ _).
 
 Elpi Export TimeUnfold.
 
-(** [TimeBound L] registers the lemma [L : forall x, [P x ->] T_g x <= B x] for [time_pose].
-    A lemma named [T_g_le] beside [T_g] is found without registration. *)
+(** [TimeBound L] registers the lemma [L : forall x, [P x ->] (T_g x <= B x)%N] for
+    [time_pose].  A lemma named [T_g_le] beside [T_g] is found without registration. *)
 
 Elpi Command TimeBound.
 Elpi Accumulate Db argent.time.db.
