@@ -2,16 +2,17 @@
 
     This file defines a binary trie keyed by [positive] with [get], [set] and [remove], derives
     their time functions, and proves that each costs at most a constant times the bit length of
-    the key.  It also proves a matching lower bound for [get] and the [bigO] and [tight]
-    corollaries.
+    the key.  It also proves a matching lower bound for [get], and it states the complexity of
+    each operation in the notation of [Complexity], with Θ in the worst case for [get].
 
     For example, [get 6 m] follows the bits of [6 = 1~1~0], so it visits at most three nodes and
     [T_get 6 m <= 3].
 
-    Builds on: Time Tactics BigO Std *)
+    Builds on: Time Tactics Complexity Std *)
 
 From Stdlib Require Import PArith NArith Lia.
-From Argent Require Import Time Tactics BigO Std.
+From Argent Require Import Time Tactics Complexity Std.
+Import ComplexityNotations.
 
 Local Open Scope N_scope.
 
@@ -124,31 +125,29 @@ Proof.
     try pose proof (IH l); try pose proof (IH r); lia.
 Qed.
 
-(** * Big-O corollaries *)
+(** * Complexity *)
 
-(** [get] runs in time O(bit length of the key). *)
-Theorem get_bigO {A : Type} :
-  bigO (fun _ => True) (fun x : positive * t A => N.of_nat (Pos.size_nat (fst x)))
-    (fun x => T_get (fst x) (snd x)).
+(** [get] runs in time 𝑂 of the bit length of the key. *)
+Theorem get_complexity {A : Type} :
+  T_get (A := A) p m ∈ 𝑂(N.of_nat (Pos.size_nat p)) for (p, m).
 Proof.
-  apply bigO_intro with (c := 1). intros [p m] _. pose proof (T_get_le p m). cbn [fst snd]. lia.
+  apply bigO_intro with (c := 1). intros [p m] _. pose proof (T_get_le p m) as Hget. lia.
 Qed.
 
-(** [set] runs in time O(bit length of the key). *)
-Theorem set_bigO {A : Type} :
-  bigO (fun _ => True) (fun x : positive * A * t A => N.of_nat (Pos.size_nat (fst (fst x))))
-    (fun x => T_set (fst (fst x)) (snd (fst x)) (snd x)).
+(** [set] runs in time 𝑂 of the bit length of the key. *)
+Theorem set_complexity {A : Type} :
+  T_set (A := A) p v m ∈ 𝑂(N.of_nat (Pos.size_nat p)) for (p, v, m).
 Proof.
-  apply bigO_intro with (c := 1). intros [[p v] m] _. pose proof (T_set_le p v m).
-  cbn [fst snd]. lia.
+  apply bigO_intro with (c := 1). intros [[p v] m] _. pose proof (T_set_le p v m) as Hset.
+  lia.
 Qed.
 
-(** [remove] runs in time O(bit length of the key). *)
-Theorem remove_bigO {A : Type} :
-  bigO (fun _ => True) (fun x : positive * t A => N.of_nat (Pos.size_nat (fst x)))
-    (fun x => T_remove (fst x) (snd x)).
+(** [remove] runs in time 𝑂 of the bit length of the key. *)
+Theorem remove_complexity {A : Type} :
+  T_remove (A := A) p m ∈ 𝑂(N.of_nat (Pos.size_nat p)) for (p, m).
 Proof.
-  apply bigO_intro with (c := 2). intros [p m] _. pose proof (T_remove_le p m). cbn [fst snd]. lia.
+  apply bigO_intro with (c := 2). intros [p m] _. pose proof (T_remove_le p m) as Hremove.
+  lia.
 Qed.
 
 (** The key [1~1~...~1] with [n] ones after the leading bit. *)
@@ -163,16 +162,15 @@ Proof.
   induction n as [| n IH]; cbn; congruence.
 Qed.
 
-(** The bound of [get] is tight: on tries that hold the key, [get] takes time proportional to
-    the bit length of the key. *)
-Theorem get_tight {A : Type} (a : A) :
-  tight (fun _ => True) (fun x : positive * t A => N.of_nat (Pos.size_nat (fst x)))
-    (fun x => T_get (fst x) (snd x)).
+(** In the worst case [get] takes time Θ of the bit length of the key, because on a trie that
+    holds the key it reads every bit, and such tries exist for keys of every length. *)
+Theorem get_worst_complexity {A : Type} (a : A) :
+  T_get (A := A) p m ∈ Θ_worst(N.of_nat (Pos.size_nat p)) for (p, m).
 Proof.
   apply tight_intro with (c := 1)
     (w := fun n => (ones (N.to_nat n), set (ones (N.to_nat n)) a Leaf)).
-  - exact get_bigO.
+  - exact get_complexity.
   - intros n. exact I.
-  - intros n. cbn [fst]. rewrite size_nat_ones. lia.
-  - intros n. cbn [fst snd]. pose proof (T_get_ge (ones (N.to_nat n)) a Leaf). lia.
+  - intros n. cbn beta iota. rewrite size_nat_ones. lia.
+  - intros n. cbn beta iota. pose proof (T_get_ge (ones (N.to_nat n)) a Leaf) as Hhit. lia.
 Qed.

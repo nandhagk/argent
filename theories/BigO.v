@@ -4,6 +4,7 @@
     constant multiple of [g + 1] on every input that satisfies [P], and [tight P g T], which
     adds a matching lower bound on inputs of every size.  The input [x] is the tuple of all
     arguments, so the constant is uniform over all of them.  Times and sizes are in [N].
+    [Complexity] adds the lower, tight and amortised bounds and a notation for all of them.
 
     For example, [bigO (fun _ => True) (fun l => N.of_nat (length l)) (fun l => T_length l)]
     holds with the constant 1, because [T_length l = N.of_nat (length l) + 1].

@@ -3,8 +3,9 @@
 Argent derives a time function `T_f` from the body of a Gallina definition `f`, and provides
 the lemmas and tactics to prove big-O bounds on it, including amortised ones. Programs stay
 plain Gallina, and no cost annotation appears in the code. This manual describes the cost
-model, the commands, the tactics, the convention for signatures, the recipe for amortised
-bounds, well-founded recursion and the limits of the library.
+model, the commands, the tactics, the complexity statements and their notation, the convention
+for signatures, the recipe for amortised bounds, well-founded recursion and the limits of the
+library.
 
 ## Cost model
 
@@ -193,14 +194,87 @@ Proof.
 Qed.
 ```
 
-## Big-O statements
+## Complexity statements
 
-`bigO P g T` says that `T x <= c * (g x + 1)` for some constant `c` and every input `x` that
-satisfies `P`. The input is the tuple of all arguments, so the constant does not depend on any
-of them. `tight P g T` adds a lower bound, which holds on inputs of every size. `bigO_intro`,
-`bigO_le`, `bigO_mono`, `bigO_add`, `bigO_trans`, `bigO_comp` and `tight_intro` build such
-statements from bounds with explicit constants. State the per-operation lemmas with explicit
-constants, and publish the `bigO` corollaries.
+A complexity statement bounds a time function `T` by a measure `g` on the inputs `x` that
+satisfy a precondition `P`. The input is the tuple of all arguments, so the constant of the
+bound does not depend on any of them. `Argent.BigO` defines the upper bound and the worst-case
+tight bound. `Argent.Complexity` re-exports `BigO` and adds the other bounds.
+
+| Bound | Constant | Meaning on the inputs that satisfy `P` |
+| --- | --- | --- |
+| 𝑂 | `bigO P g T` | `T x <= c * (g x + 1)` for one constant `c` |
+| Ω | `bigOmega P g T` | `g x <= c * (T x + 1)` for one constant `c` |
+| Θ | `bigTheta P g T` | both of the above |
+| Ω in the worst case | `bigOmega_worst P g T` | inputs of every size reach `g x <= c * T x` for one constant `c` |
+| Θ in the worst case | `tight P g T` | 𝑂 and Ω in the worst case |
+| amortised 𝑂 | `bigO_amortised P g T before after` | `T x + after x <= c * (g x + 1) + before x` for one constant `c` |
+
+A lookup in a trie that misses can stop after one step, so the time of a lookup has no lower
+bound in the length of its key on every input. In the worst case the lookup has such a lower
+bound, because a trie that holds the key makes the lookup read every bit of it. Ω in the worst
+case states such a bound.
+
+The amortised bound counts the potential `before x` that the operation finds and the potential
+`after x` that it leaves. For operations that keep an invariant, `bigO_amortised_run` gives one
+constant `c` such that a sequence of operations costs at most `c * (g o s + 1)` per operation
+plus the potential of its first state.
+
+The module `ComplexityNotations` gives each bound a notation. A file that runs
+`From Argent Require Import Complexity.` and `Import ComplexityNotations.` can write the
+following forms.
+
+| Notation | Constant |
+| --- | --- |
+| `T ∈ 𝑂(g) for x \| P` | `bigO` |
+| `T ∈ Ω(g) for x \| P` | `bigOmega` |
+| `T ∈ Θ(g) for x \| P` | `bigTheta` |
+| `T ∈ Ω_worst(g) for x \| P` | `bigOmega_worst` |
+| `T ∈ Θ_worst(g) for x \| P` | `tight` |
+| `T ∈ 𝑂(g) amortised a ↦ b for x \| P` | `bigO_amortised` with `before := a` and `after := b` |
+
+The binder `x` is a name or a tuple pattern without a quote, such as `(p, m)`. It binds the
+variables of the time `T`, the measure `g`, the precondition `P` and the potentials. Without
+`| P` the precondition is `True`. The upper bound is written with the italic capital `𝑂`
+(U+1D442). It is a different letter from the constructor `O` of `nat`, so a file that imports
+the notation writes `O` as before. The trie of `examples/Trie.v` states its bounds this way.
+
+```coq
+Theorem get_complexity {A : Type} :
+  T_get (A := A) p m ∈ 𝑂(N.of_nat (Pos.size_nat p)) for (p, m).
+```
+
+The statement is the term
+`bigO (fun _ => True) (fun '(p, m) => N.of_nat (Pos.size_nat p)) (fun '(p, m) => T_get p m)`.
+The pattern `(p, m)` gives no type to `m`, so the statement names the implicit argument `A` of
+`T_get`. The notation follows these rules.
+
+- A bound is at level 70 with no associativity, as `=` and `<=` are. The time is read at
+  level 69, so a sum of times needs no parentheses.
+- The measure is read at level 200 inside its parentheses, and the potentials at level 69.
+- The precondition is read at level 200, so it extends to the end of the statement, as the body
+  of `forall` does. A bound with a precondition needs parentheses when more text follows it,
+  such as `->` and a conclusion. A bound without a precondition is a term of level 70, which
+  `/\` and `->` join as they join an equation.
+- The time, the measure and the potentials are read in `N_scope`. A size of type `nat` enters
+  the measure through `N.of_nat`, as the section on signatures requires, and the precondition
+  is read in the scope of the statement.
+- Rocq prints every bound in the notation, also one written with `fst` and `snd`, and it breaks
+  a long line before `for`.
+
+`bigO_intro`, `bigO_le`, `bigO_mono`, `bigO_add`, `bigO_trans` and `bigO_comp` build and combine
+upper bounds from bounds with explicit constants. The lower bounds have the lemmas of the same
+names with `bigOmega` in place of `bigO`. `bigOmega_le` keeps a lower bound for a larger time,
+and `bigOmega_mono` keeps it for a smaller measure. The tight bounds have `bigTheta_intro`,
+`bigTheta_add`, `bigTheta_trans`, `bigTheta_comp`, `bigTheta_sym` and `bigTheta_shift`, which
+gives Θ to a time that equals its measure plus a constant. `tight_intro`,
+`bigOmega_worst_intro`, `bigOmega_worst_of_bigOmega` and `tight_of_bigTheta` give the
+worst-case bounds from inputs of every size, and `tight_iff` splits `tight` into 𝑂 and Ω in the
+worst case.
+`bigO_amortised_intro`, `bigO_amortised_sub` and `bigO_amortised_of_bigO` give the amortised
+bound. `bigO_subset` restates a bound with a precondition as a bound on the subset type
+`{x | P x}`. State the per-operation lemmas with explicit constants, and publish the complexity
+statements as their corollaries.
 
 ## Signatures
 

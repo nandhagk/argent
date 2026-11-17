@@ -157,7 +157,7 @@ T_f := λ params⁺. [fix T_F args⁺ {struct i⁺}] 1 + T⟦body[F := f params]
 
 ## 3. The library
 
-The library has six theories.
+The library has seven theories.
 
 - `Time` holds the translator and the commands. `TimeFun` derives time functions. `TimeCheck`
   re-derives and compares. `TimeAudit` walks the constants reachable from roots. `TimePrim`
@@ -176,6 +176,27 @@ The library has six theories.
 
 - `Amortised` proves `amortised_run` and `amortised_uniform` for a sequence of operations
   `op : O -> S -> S`, a potential `Phi` and an invariant `Inv` [12].
+- `Complexity` defines the other bounds on the same tuple of inputs. The lower bound is the
+  upper bound with the time and the measure swapped, so each closure lemma of `bigO` gives its
+  mirror in one line. `tight` is the upper bound together with the worst-case lower bound.
+
+  ```coq
+  Definition bigOmega {X} (P : X -> Prop) (g T : X -> N) : Prop := bigO P T g.
+  Definition bigTheta {X} (P : X -> Prop) (g T : X -> N) : Prop :=
+    bigO P g T /\ bigOmega P g T.
+  Definition bigOmega_worst {X} (P : X -> Prop) (g T : X -> N) : Prop :=
+    exists c, forall n, exists x, P x /\ n <= g x /\ g x <= c * T x.
+  Definition bigO_amortised {X} (P : X -> Prop) (g T before after : X -> N) : Prop :=
+    exists c, forall x, P x -> T x + after x <= c * (g x + 1) + before x.
+  ```
+
+  The module `ComplexityNotations` writes a bound as `T ∈ 𝑂(g) for x | P`, where the pattern
+  `x` binds the variables of `T`, `g` and `P`. The precondition stays a predicate. A subset type
+  or a record of well-formed inputs would change every proof that takes a bound apart, and
+  `bigO_subset` gives the bound on the subset type `{x | P x}` when a reader wants the domain as
+  a type. The upper bound is written with the italic `𝑂` (U+1D442). With the ASCII letter the
+  lexer would read `O(` as one token, and the constructor `O` of `nat` followed directly by a
+  comment, as in `S O(* ... *)`, would no longer parse.
 - `Loop` defines `loop`, which recurses structurally on an accessibility proof, and
   `loop_fuel`, which takes `nat` fuel. Their potential lemmas `T_loop_le` and `T_loop_fuel_le`
   bound the time by `Phi s + Tstop + 1` when every continuing step pays its cost and its call

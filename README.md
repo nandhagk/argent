@@ -37,6 +37,9 @@ The library has the following theories, under the logical name `Argent`.
   `TimePrim`, `TimePrimTable`, `TimeUnfold` and `TimeBound`.
 - `BigO` defines `bigO` and `tight` with their closure lemmas.
 - `Amortised` proves the potential method for sequences of operations.
+- `Complexity` adds the lower bound Ω, the tight bound Θ, the worst-case lower bound and the
+  amortised bound to those of `BigO`, with their closure lemmas, and the notation
+  `T ∈ 𝑂(g) for x | P` for every bound.
 - `Loop` defines a loop over an accessibility proof and a loop with fuel, each with a potential
   lemma that bounds its time independently of the proof and the fuel.
 - `Std` derives the time functions of the standard-library functions on lists, booleans, pairs,
@@ -47,13 +50,13 @@ The library has the following theories, under the logical name `Argent`.
 - `Tactics` holds `time_pose`, `time_simpl`, `time_cbn`, `time_step`, `loop_bound` and
   `amortise`.
 
-The directory `examples` (`Argent.Examples`) holds a binary trie with a tight bound, a two-list
-queue with an amortised bound, maps over abstract keys with a client functor that uses only the
-signature's contracts, two loops, and two functions defined by `Fix` and bounded through the
-potential lemma of `Fix`. The directory `tests` (`Argent.Tests`) checks every feature of the command,
-every rejection, the tactics, the bounds of `Std`, the assumptions of the example theorems and
-the extraction of the loop and of a function defined by `Fix`, and evaluates time functions on
-large lists.
+The directory `examples` (`Argent.Examples`) holds a binary trie with a worst-case tight bound, a
+two-list queue with an amortised bound, maps over abstract keys with a client functor that uses
+only the signature's contracts, two loops, and two functions defined by `Fix` and bounded
+through the potential lemma of `Fix`. The directory `tests` (`Argent.Tests`) checks every
+feature of the command, every rejection, the tactics, the bounds of `Std`, the complexity
+notation, the assumptions of the example theorems and the extraction of the loop and of a
+function defined by `Fix`, and evaluates time functions on large lists.
 
 `docs/manual.md` explains how to use the library, and `docs/design.md` records the design, the
 translation rules and their meta-theory.
