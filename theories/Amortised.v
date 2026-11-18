@@ -1,16 +1,22 @@
 (** * Amortised bounds
 
-    This file proves Tarjan's potential method for a sequence of operations.  An operation [o]
-    maps a state [s] to [op o s] at cost [T o s].  When every operation satisfies
-    [T o s + Phi (op o s) <= A o s + Phi s] for a potential [Phi], the total cost of a
-    sequence is at most its total amortised cost plus the initial potential.
+    Some operations are expensive now and then, but cheap on average over any sequence of them.
+    This file proves the potential method of Tarjan, which bounds a whole sequence.  An
+    operation [o] maps a state [s] to [op o s] and costs [T o s].  Choose a potential [Phi] on
+    states and an amortised cost [A].  When every operation satisfies
 
-    For example, a queue built from two lists has [Phi] equal to the length of its back list
-    and an amortised cost of a constant per operation, so [n] operations from the empty queue
-    cost at most a constant times [n].
+      T o s + Phi (op o s) <= A o s + Phi s,
 
-    The bounds hold along one sequence of versions.  They say nothing about a branching history
-    in which one version is used several times.
+    a sequence of operations costs at most the sum of its amortised costs, plus the potential
+    of the first state.
+
+    For example, a queue made of two lists, with [Phi] the length of the back list, has an
+    amortised cost of a constant per operation, so [n] operations from the empty queue cost at
+    most a constant times [n].
+
+    The bounds hold along one sequence of states, each used once.  They say nothing about a
+    history that uses one state several times, because repeating an expensive operation on the
+    same state is not paid for.
 
     Builds on: Stdlib Lia NArith *)
 
@@ -21,6 +27,8 @@ Local Open Scope N_scope.
 
 Section Amortised.
 
+(** The operations [op], their costs [T], their amortised costs [A], the potential [Phi], and
+    the invariant [Inv] that the states keep. *)
 Context {S O : Type} (op : O -> S -> S) (T A : O -> S -> N) (Phi : S -> N)
   (Inv : S -> Prop).
 
@@ -45,8 +53,8 @@ Fixpoint budget (os : list O) (s : S) : N :=
   | o :: r => A o s + budget r (op o s)
   end.
 
-(** Every operation keeps the invariant and pays its actual cost and the change of potential
-    from its amortised cost. *)
+(** Every operation keeps the invariant [Inv], and its cost plus the potential that it leaves
+    is at most its amortised cost plus the potential that it found. *)
 Definition amortised : Prop :=
   forall o s, Inv s -> Inv (op o s) /\ T o s + Phi (op o s) <= A o s + Phi s.
 

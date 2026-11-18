@@ -1,21 +1,23 @@
 (** * Time functions of the standard library
 
-    This file derives the time functions of the standard-library functions on lists, booleans,
-    pairs, [nat], [positive], [N] and [Z] that client code calls, and of the well-founded
-    recursors [Fix_F], [Fix], [Acc_rect] and [well_founded_induction_type].  It proves a bound
-    for each of the listed functions on data and a potential lemma for each recursor.  Each
-    time function lives in a module named like the last component of the path of its constant:
-    [Datatypes.T_length], [List.T_rev], [Nat.T_add], [Pos.T_add], [N.T_add], [Z.T_add],
-    [Wf.T_Fix].
+    Code that calls the standard library needs the time functions of the functions it calls.
+    This file derives them, with [TimeFun], for the common functions on booleans, pairs, lists,
+    [nat], [positive], [N] and [Z], and for the well-founded recursors [Fix_F], [Fix],
+    [Acc_rect] and [well_founded_induction_type].  It also proves bounds for the common ones,
+    and a potential lemma for each recursor.
 
-    Bounds are stated in the natural size of the arguments, the length of a list or the bit
-    length [Pos.size_nat] of a number, with explicit constants.  Times and bounds are in [N],
-    and a size of type [nat] enters a bound as [N.of_nat] of the size, so this file opens
-    [N_scope] and marks the statements about sizes alone with [%nat].  The model is the
-    extracted code with no native numbers, so [nat] arithmetic is unary and [positive]
-    arithmetic is per bit.
+    A time function lives in a module with the same last name as the module of its constant,
+    because that is where [TimeFun] looks for it: [Datatypes.T_length], [List.T_rev],
+    [Nat.T_add], [Pos.T_add], [N.T_add], [Z.T_add], [Wf.T_Fix].  A bound on [T_g] is named
+    [T_g_le] and sits beside [T_g], so [time_pose] and [time_step] use it without registration.
 
-    For example, [List.T_rev_le] says
+    The bounds are in the size of the arguments: the length of a list, or the bit length of a
+    number ([Pos.size_nat], [N.size_nat], [Z.size_nat]).  Times and bounds have type [N], and a
+    size has type [nat] and enters a bound as [N.of_nat] of the size.  So this file opens
+    [N_scope] and marks the statements about sizes alone with [%nat].  The model has no native
+    numbers, so [nat] arithmetic is unary and binary arithmetic costs one step per bit.
+
+    For example, [List.T_rev_le] says that reversing a list takes quadratic time:
     [List.T_rev l <= (N.of_nat (length l) + 1) * (N.of_nat (length l) + 1)].
 
     Builds on: Time Tactics *)
@@ -26,7 +28,10 @@ Import List.ListNotations.
 
 Local Open Scope N_scope.
 
-(** * Booleans, pairs and lists of the prelude *)
+(** * Booleans, pairs and lists of the prelude
+
+    These functions are defined in the module [Datatypes] of the prelude, so their time
+    functions live in a module named [Datatypes]. *)
 
 Module Datatypes.
 
@@ -74,10 +79,14 @@ Qed.
 
 End Datatypes.
 
+(** [map] is defined in the module [ListDef] of the standard library, so its time function lives
+    in a module named [ListDef]. *)
 Module ListDef.
 
 TimeFun map.
 
+(** When every call of [f] costs at most [k], [map f l] costs at most [k + 1] per element of
+    [l], plus 1. *)
 Lemma T_map_le {A B : Type} (f : A -> B) (T_f : A -> N) (k : N) (l : list A) :
   (forall a, T_f a <= k) -> T_map f T_f l <= (k + 1) * N.of_nat (length l) + 1.
 Proof.
@@ -86,7 +95,12 @@ Qed.
 
 End ListDef.
 
-(** * Lists *)
+(** * Lists
+
+    The bounds are linear in the length of the list, or in the index for [nth_error], except
+    for [rev], which is quadratic because it appends each element at the end of the reversed
+    tail.  A function argument [f] comes with its companion [T_f], and the bounds assume that
+    every call of [f] costs at most [k]. *)
 
 Module List.
 
@@ -149,7 +163,10 @@ Qed.
 
 End List.
 
-(** * Unary natural numbers *)
+(** * Unary natural numbers
+
+    [nat] is unary, so [Nat.add n m] takes at most [n + 1] steps, and [Nat.mul n m] at most
+    [(n + 1) * (m + 2)]. *)
 
 Module Nat.
 
@@ -177,7 +194,11 @@ Qed.
 
 End Nat.
 
-(** * Binary positive numbers *)
+(** * Binary positive numbers
+
+    Most bounds are linear in the bit length [Pos.size_nat p] of an argument, because each
+    recursive call handles one bit.  [Pos.mul] and [Pos.gcd] are quadratic, and [Pos.iter f x n]
+    is linear in the value of [n]. *)
 
 Module Pos.
 
@@ -365,6 +386,7 @@ Qed.
 
 (** * Iteration and the greatest common divisor *)
 
+(** The strict form of [T_iter_le], which the induction needs. *)
 Lemma T_iter_lt {A : Type} (f : A -> A) (T_f : A -> N) (Inv : A -> Prop) (k : N)
     (x : A) (n : positive) :
   (forall y, Inv y -> Inv (f y)) -> (forall y, Inv y -> T_f y <= k) -> Inv x ->
@@ -426,7 +448,10 @@ Qed.
 
 End Pos.
 
-(** * Binary natural numbers *)
+(** * Binary natural numbers
+
+    An operation on [N] handles [0] and calls the operation on [positive] for [N.pos p], so its
+    bound is the one on [positive] plus a constant. *)
 
 Module N.
 
@@ -633,9 +658,10 @@ Proof.
   induction p as [p IH | p IH |]; time_step.
 Qed.
 
-(** [Z.pos_sub] is linear only in the amortised sense: at a level whose result is about to be
-    decremented, [Pos.pred_double] walks the trailing zeros of the result so far.  Those zeros
-    are paid by the potential [trailing_zeros_z], which grows by at most one per level. *)
+(** [Z.pos_sub] takes linear time, but the proof needs a potential.  At a level whose result is
+    about to be decremented, [Pos.pred_double] walks the trailing zeros of the result so far.
+    The lemma pays for those zeros with the potential [trailing_zeros_z] of the result, which
+    grows by at most one per level.  [T_pos_sub_le] below drops the potential. *)
 Lemma T_pos_sub_zeros (p q : positive) :
   T_pos_sub p q + N.of_nat (trailing_zeros_z (Z.pos_sub p q)) <=
   3 * N.of_nat (Pos.size_nat p + Pos.size_nat q).
@@ -849,7 +875,7 @@ Proof.
 Qed.
 
 (** Each bit of [a] costs a doubling, a comparison and a subtraction, which are linear in the
-    bit lengths of the partial quotient and remainder. *)
+    bit lengths of the partial quotient and remainder, so the division takes quadratic time. *)
 Lemma T_pos_div_eucl_le (a : positive) (b : Z) :
   (0 < b)%Z ->
   T_pos_div_eucl a b <=
@@ -877,7 +903,8 @@ Proof.
 Qed.
 
 
-(** [Z.div_eucl] divides the absolute values and corrects the signs, which is linear. *)
+(** [Z.div_eucl] divides the absolute values with [Z.pos_div_eucl] and then corrects the signs.
+    The correction is linear, so the whole division is quadratic, like [Z.pos_div_eucl]. *)
 Lemma T_div_eucl_le (a b : Z) :
   T_div_eucl a b <= 16 * (N.of_nat (size_nat a) + 1) * (N.of_nat (size_nat a + size_nat b) + 2).
 Proof.
@@ -917,9 +944,14 @@ End Z.
 (** * Well-founded recursion
 
     [Fix_F] recurses structurally on an accessibility proof, so [TimeFun] derives its time
-    function like any other.  The companion [T_F] of the functional takes the companion
-    [T_rec] of its recursive-call argument.  The proofs [Rwf x] and [Acc_inv a h] are
-    irrelevant and cost nothing. *)
+    function like any other.  The functional [F] gets its companion [T_F], which receives the
+    companion [T_rec] of the recursive calls.  The proofs [Rwf x] and [Acc_inv a h] are
+    erased, so they cost nothing.
+
+    Each lemma below bounds a whole recursion by a potential [Phi].  Its premise is about one
+    step: when every recursive call on [y] costs at most [Phi y + 1], the step at [x] plus 1
+    costs at most [Phi x].  For [well_founded_induction_type] the premise asks for plus 2,
+    because it goes through one more closure. *)
 
 Module Wf.
 
@@ -929,9 +961,8 @@ Section Bounds.
 
 Context {A : Type} {R : A -> A -> Prop} (P : A -> Type).
 
-(** The potential lemma of [Fix_F]: when one step of [F] pays its cost and its call from the
-    potential [Phi x], given that each recursive call on [y] costs [Phi y + 1] with the call of
-    its closure, the whole recursion costs at most [Phi x]. *)
+(** The potential lemma of [Fix_F]: when every step pays for itself from [Phi], the recursion
+    from [x] costs at most [Phi x], whatever the accessibility proof. *)
 Lemma T_Fix_F_le (F : forall x, (forall y, R y x -> P y) -> P x)
     (T_F : forall x, (forall y, R y x -> P y) -> (forall y, R y x -> N) -> N)
     (Phi : A -> N) :
@@ -943,7 +974,8 @@ Proof.
   rewrite N.add_comm. apply HF. intros y h. specialize (IH y (Hacc y h)). lia.
 Qed.
 
-(** The potential lemma of [Fix], which adds one call to that of [Fix_F]. *)
+(** The potential lemma of [Fix].  [Fix] adds one call to [Fix_F], so the bound is
+    [Phi x + 1]. *)
 Lemma T_Fix_le (Rwf : well_founded R) (F : forall x, (forall y, R y x -> P y) -> P x)
     (T_F : forall x, (forall y, R y x -> P y) -> (forall y, R y x -> N) -> N)
     (Phi : A -> N) :

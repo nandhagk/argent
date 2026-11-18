@@ -1,16 +1,19 @@
 (** * Complexity bounds
 
-    This file defines the bounds of a time function and writes all of them in one notation.
-    Each bound relates a time function [T] and a measure [g] on the inputs that satisfy a
-    precondition [P], with one constant for all those inputs.  The input is the tuple of all
-    arguments, so the constant does not depend on any of them, and times and sizes are in [N].
-    [bigO] is the upper bound 𝑂, [bigOmega] the lower bound Ω on every input, [bigTheta] both,
-    [bigOmega_worst] a lower bound that inputs of every size reach, [tight] the upper bound
-    with that worst-case lower bound, and [bigO_amortised] an upper bound on the time plus the
-    change of a potential.  The module [ComplexityNotations] writes a bound as
-    [T x ∈ 𝑂(g x) for x | P x], where [x] is a name or a tuple pattern and [| P x] may be left
-    out.  A bound on the inputs that satisfy [P] is a bound on the subset type [{x | P x}]
-    ([bigO_subset]).
+    This file defines what it means for a time function to be in 𝑂, Ω or Θ of a measure, and
+    gives each bound a notation.  A bound is about a time function [T], a measure [g] and a
+    precondition [P] on one input [x], which is the tuple of all the arguments.  For example,
+
+      T ∈ 𝑂(g) for x | P   means   exists c, forall x, P x -> T x <= c * (g x + 1).
+
+    The constant [c] comes first, so it is the same for all inputs.  The [+ 1] lets a constant
+    time be in 𝑂 of a measure that can be 0, such as the length of a list.  Times and measures
+    have type [N].
+
+    The bounds are [bigO] (𝑂), [bigOmega] (Ω, a lower bound on every input), [bigTheta] (Θ,
+    both), [bigOmega_worst] (Ω in the worst case: reached on inputs of every size), [tight] (𝑂
+    together with Ω in the worst case) and [bigO_amortised] (𝑂 for the time plus the change of a
+    potential).  The module [ComplexityNotations] writes each of them in the form above.
 
     For example, [T_length l ∈ Θ(N.of_nat (length l)) for l] holds with the constant 1,
     because [T_length l = N.of_nat (length l) + 1].
@@ -24,23 +27,26 @@ Local Open Scope N_scope.
 
 (** * Definitions *)
 
-(** [T] is at most [c * (g x + 1)] on the inputs that satisfy [P], for some constant [c]. *)
+(** [T x] is at most [c * (g x + 1)] for every input [x] that satisfies [P], with one constant
+    [c] for all of them. *)
 Definition bigO {X} (P : X -> Prop) (g T : X -> N) : Prop :=
   exists c, forall x, P x -> T x <= c * (g x + 1).
 
-(** [g] is at most a constant multiple of [T + 1] on the inputs that satisfy [P]. *)
+(** [g x] is at most [c * (T x + 1)] for every input [x] that satisfies [P]: up to the
+    constant, [T] is at least [g] on every such input. *)
 Definition bigOmega {X} (P : X -> Prop) (g T : X -> N) : Prop := bigO P T g.
 
 (** [T] is in 𝑂(g) and in Ω(g) on the inputs that satisfy [P]. *)
 Definition bigTheta {X} (P : X -> Prop) (g T : X -> N) : Prop :=
   bigO P g T /\ bigOmega P g T.
 
-(** Inputs of every size satisfy [P] and take time at least [g] over a constant. *)
+(** For every size [n], some input [x] that satisfies [P] and has [g x >= n] takes time at
+    least [g x], up to the constant: [g x <= c * T x]. *)
 Definition bigOmega_worst {X} (P : X -> Prop) (g T : X -> N) : Prop :=
   exists c, forall n, exists x, P x /\ n <= g x /\ g x <= c * T x.
 
-(** [T] is in 𝑂(g) on [P], and on inputs of every size [g] is at most a constant multiple of
-    [T]. *)
+(** [T] is in 𝑂(g) on [P], and in Ω(g) in the worst case: the upper bound is reached on
+    inputs of every size. *)
 Definition tight {X} (P : X -> Prop) (g T : X -> N) : Prop :=
   bigO P g T /\ exists c, forall n, exists x, P x /\ n <= g x /\ g x <= c * T x.
 
@@ -51,9 +57,11 @@ Definition bigO_amortised {X} (P : X -> Prop) (g T before after : X -> N) : Prop
 
 (** * Notation *)
 
-(** A bound reads [T ∈ 𝑂(g) for x | P], where the pattern [x] binds the variables of the time
-    [T], the measure [g] and the precondition [P].  Without [| P] the precondition is [True].
-    The time, the measure and the potentials are read in [N_scope]. *)
+(** A bound reads [T ∈ 𝑂(g) for x | P].  The pattern [x], a name or a tuple such as [(p, m)],
+    binds the variables of the time [T], the measure [g] and the precondition [P].  Without
+    [| P], the precondition is [True].  The time, the measure and the potentials are read in
+    [N_scope].  The letter is the italic 𝑂 (U+1D442), so that [O], the zero of [nat], keeps
+    parsing as before. *)
 Module ComplexityNotations.
 
   Notation "T ∈ 𝑂( g ) 'for' x | P" := (bigO (fun x => P) (fun x => g%N) (fun x => T%N))
@@ -113,24 +121,28 @@ Import ComplexityNotations.
 
 (** * Upper bounds *)
 
+(** To prove [bigO], give the constant [c] and show [T x <= c * g x + c] on every input. *)
 Lemma bigO_intro {X} (P : X -> Prop) (g T : X -> N) c :
   (forall x, P x -> T x <= c * g x + c) -> bigO P g T.
 Proof.
   intros Hle. exists c. intros x Hx. specialize (Hle x Hx). lia.
 Qed.
 
+(** A smaller time stays in 𝑂(g). *)
 Lemma bigO_le {X} (P : X -> Prop) (g T T2 : X -> N) :
   bigO P g T -> (forall x, P x -> T2 x <= T x) -> bigO P g T2.
 Proof.
   intros [c Hc] Hle. exists c. intros x Hx. specialize (Hc x Hx). specialize (Hle x Hx). lia.
 Qed.
 
+(** A time in 𝑂 of a measure is in 𝑂 of every larger measure. *)
 Lemma bigO_mono {X} (P : X -> Prop) (g g2 T : X -> N) :
   bigO P g T -> (forall x, P x -> g x <= g2 x) -> bigO P g2 T.
 Proof.
   intros [c Hc] Hle. exists c. intros x Hx. specialize (Hc x Hx). specialize (Hle x Hx). nia.
 Qed.
 
+(** The sum of two times is in 𝑂 of the sum of their measures. *)
 Lemma bigO_add {X} (P : X -> Prop) (g1 g2 T1 T2 : X -> N) :
   bigO P g1 T1 -> bigO P g2 T2 ->
   bigO P (fun x => g1 x + g2 x) (fun x => T1 x + T2 x).
@@ -139,6 +151,7 @@ Proof.
   specialize (H1 x Hx). specialize (H2 x Hx). nia.
 Qed.
 
+(** 𝑂 is transitive: when [h] is in 𝑂(g) and [T] is in 𝑂(h), [T] is in 𝑂(g). *)
 Lemma bigO_trans {X} (P : X -> Prop) (g h T : X -> N) :
   bigO P g h -> bigO P h T -> bigO P g T.
 Proof.
@@ -146,6 +159,8 @@ Proof.
   specialize (H1 x Hx). specialize (H2 x Hx). nia.
 Qed.
 
+(** A bound on inputs of type [Y] gives a bound on inputs of type [X] through any map
+    [f : X -> Y], such as a projection of a tuple of arguments. *)
 Lemma bigO_comp {X Y} (P : Y -> Prop) (f : X -> Y) (g T : Y -> N) :
   bigO P g T -> bigO (fun x => P (f x)) (fun x => g (f x)) (fun x => T (f x)).
 Proof.
@@ -154,7 +169,8 @@ Qed.
 
 (** * Domains *)
 
-(** A bound on the inputs that satisfy [P] is a bound on the subset type [{x | P x}]. *)
+(** A bound on the inputs that satisfy [P] is the same as a bound on the subset type
+    [{x | P x}]. *)
 Lemma bigO_subset {X} (P : X -> Prop) (g T : X -> N) :
   bigO P g T <->
   bigO (X := {x | P x}) (fun _ => True) (fun x => g (proj1_sig x)) (fun x => T (proj1_sig x)).
@@ -166,6 +182,7 @@ Qed.
 
 (** * Lower bounds *)
 
+(** To prove [bigOmega], give the constant [c] and show [g x <= c * T x + c] on every input. *)
 Lemma bigOmega_intro {X} (P : X -> Prop) (g T : X -> N) c :
   (forall x, P x -> g x <= c * T x + c) -> bigOmega P g T.
 Proof.
@@ -186,6 +203,7 @@ Proof.
   intros Hlow Hle. exact (bigO_le P T g g2 Hlow Hle).
 Qed.
 
+(** The lower-bound form of [bigO_add]. *)
 Lemma bigOmega_add {X} (P : X -> Prop) (g1 g2 T1 T2 : X -> N) :
   bigOmega P g1 T1 -> bigOmega P g2 T2 ->
   bigOmega P (fun x => g1 x + g2 x) (fun x => T1 x + T2 x).
@@ -193,12 +211,14 @@ Proof.
   exact (bigO_add P T1 T2 g1 g2).
 Qed.
 
+(** The lower-bound form of [bigO_trans]. *)
 Lemma bigOmega_trans {X} (P : X -> Prop) (g h T : X -> N) :
   bigOmega P g h -> bigOmega P h T -> bigOmega P g T.
 Proof.
   intros Hgh Hht. exact (bigO_trans P T h g Hht Hgh).
 Qed.
 
+(** The lower-bound form of [bigO_comp]. *)
 Lemma bigOmega_comp {X Y} (P : Y -> Prop) (f : X -> Y) (g T : Y -> N) :
   bigOmega P g T -> bigOmega (fun x => P (f x)) (fun x => g (f x)) (fun x => T (f x)).
 Proof.
@@ -207,6 +227,7 @@ Qed.
 
 (** * Tight bounds *)
 
+(** Θ is 𝑂 together with Ω. *)
 Lemma bigTheta_intro {X} (P : X -> Prop) (g T : X -> N) :
   bigO P g T -> bigOmega P g T -> bigTheta P g T.
 Proof.
@@ -222,12 +243,14 @@ Proof.
   - exists 1. intros x Hx. rewrite (Heq x Hx). lia.
 Qed.
 
+(** Θ is symmetric: the time and the measure can swap places. *)
 Lemma bigTheta_sym {X} (P : X -> Prop) (g T : X -> N) :
   bigTheta P g T -> bigTheta P T g.
 Proof.
   intros [Hup Hlow]. split; assumption.
 Qed.
 
+(** The Θ form of [bigO_add]. *)
 Lemma bigTheta_add {X} (P : X -> Prop) (g1 g2 T1 T2 : X -> N) :
   bigTheta P g1 T1 -> bigTheta P g2 T2 ->
   bigTheta P (fun x => g1 x + g2 x) (fun x => T1 x + T2 x).
@@ -237,6 +260,7 @@ Proof.
   - exact (bigOmega_add P g1 g2 T1 T2 Hlow1 Hlow2).
 Qed.
 
+(** The Θ form of [bigO_trans]. *)
 Lemma bigTheta_trans {X} (P : X -> Prop) (g h T : X -> N) :
   bigTheta P g h -> bigTheta P h T -> bigTheta P g T.
 Proof.
@@ -245,6 +269,7 @@ Proof.
   - exact (bigOmega_trans P g h T Hhg Hth).
 Qed.
 
+(** The Θ form of [bigO_comp]. *)
 Lemma bigTheta_comp {X Y} (P : Y -> Prop) (f : X -> Y) (g T : Y -> N) :
   bigTheta P g T -> bigTheta (fun x => P (f x)) (fun x => g (f x)) (fun x => T (f x)).
 Proof.
@@ -262,7 +287,8 @@ Proof.
   reflexivity.
 Qed.
 
-(** Witnesses [w n] of every size [n] give the worst-case lower bound. *)
+(** To prove [bigOmega_worst], give for every size [n] an input [w n] that satisfies [P] and
+    has [g (w n) >= n], and show [g (w n) <= c * T (w n)]. *)
 Lemma bigOmega_worst_intro {X} (P : X -> Prop) (g T : X -> N) (c : N) (w : N -> X) :
   (forall n, P (w n)) -> (forall n, n <= g (w n)) -> (forall n, g (w n) <= c * T (w n)) ->
   bigOmega_worst P g T.
@@ -270,8 +296,8 @@ Proof.
   intros HP Hsize Hlow. exists c. intros n. exists (w n). auto.
 Qed.
 
-(** A pointwise lower bound [g x <= c * T x] on inputs of unbounded size, together with an
-    upper bound, gives [tight]. *)
+(** To prove [tight], give the upper bound, and inputs [w n] of every size as for
+    [bigOmega_worst_intro]. *)
 Lemma tight_intro {X} (P : X -> Prop) (g T : X -> N) (c : N) (w : N -> X) :
   bigO P g T ->
   (forall n, P (w n)) -> (forall n, n <= g (w n)) -> (forall n, g (w n) <= c * T (w n)) ->
@@ -281,8 +307,8 @@ Proof.
   exists c. intros n. exists (w n). auto.
 Qed.
 
-(** A pointwise lower bound on a time of at least 1 gives the worst-case lower bound on a
-    domain with inputs of every size. *)
+(** A lower bound on every input gives the worst-case lower bound, when every input takes at
+    least one step and there are inputs of every size. *)
 Lemma bigOmega_worst_of_bigOmega {X} (P : X -> Prop) (g T : X -> N) :
   bigOmega P g T -> (forall x, P x -> 1 <= T x) -> (forall n, exists x, P x /\ n <= g x) ->
   bigOmega_worst P g T.
@@ -292,6 +318,7 @@ Proof.
   specialize (Hpos x Hx). repeat split; [assumption | assumption | nia].
 Qed.
 
+(** Θ gives Θ in the worst case under the same two conditions. *)
 Lemma tight_of_bigTheta {X} (P : X -> Prop) (g T : X -> N) :
   bigTheta P g T -> (forall x, P x -> 1 <= T x) -> (forall n, exists x, P x /\ n <= g x) ->
   tight P g T.
@@ -302,6 +329,8 @@ Qed.
 
 (** * Amortised bounds *)
 
+(** To prove [bigO_amortised], give the constant [c] and show
+    [T x + after x <= c * g x + c + before x] on every input. *)
 Lemma bigO_amortised_intro {X} (P : X -> Prop) (g T before after : X -> N) c :
   (forall x, P x -> T x + after x <= c * g x + c + before x) ->
   bigO_amortised P g T before after.
@@ -309,7 +338,8 @@ Proof.
   intros Hle. exists c. intros x Hx. specialize (Hle x Hx). lia.
 Qed.
 
-(** The amortised bound is the upper bound of the time plus the rise of the potential. *)
+(** An amortised bound is the same as an upper bound on [T x + after x - before x], the time
+    plus the change of the potential, where the subtraction stops at 0. *)
 Lemma bigO_amortised_sub {X} (P : X -> Prop) (g T before after : X -> N) :
   bigO_amortised P g T before after <->
   bigO P g (fun x => T x + after x - before x).
@@ -327,9 +357,9 @@ Proof.
   specialize (Hfall x Hx). lia.
 Qed.
 
-(** When the operations [op] keep the invariant [Inv] and meet the amortised bound with the
-    potential [Phi], a sequence of operations costs at most [c * (g o s + 1)] per operation
-    plus the potential of its first state, for one constant [c]. *)
+(** When the operations [op] keep the invariant [Inv] and meet an amortised bound with the
+    potential [Phi], a sequence of operations costs at most [c * (g o s + 1)] per operation, plus
+    the potential of its first state, for one constant [c]. *)
 Theorem bigO_amortised_run {S O} (op : O -> S -> S) (T g : O -> S -> N) (Phi : S -> N)
     (Inv : S -> Prop) :
   (forall o s, Inv s -> Inv (op o s)) ->

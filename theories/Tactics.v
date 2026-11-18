@@ -1,14 +1,19 @@
 (** * Tactics for time bounds
 
-    This file defines the tactics that prove bounds on derived time functions.  [time_pose]
-    adds the registered bound of every time function applied in the goal, [time_simpl] unfolds
-    time functions whose value is a numeral, and [time_step] unfolds one time function and then
-    tries [nia].  [loop_bound] and [amortise] apply the potential lemmas of Loop and Amortised.
+    This file gives the tactics that prove bounds [T_f args <= bound] on time functions.  The
+    main one is [time_step].  It unfolds the time function on the left by one step, computes
+    the sizes in the goal, adds the bounds that it knows for the time functions left in the
+    goal, and tries to finish with arithmetic.  A bound on a structurally recursive function
+    usually needs only an induction and [time_step].
 
-    For example, on the goal [T_get p (set p v m) <= 5 * N.of_nat (Pos.size_nat p)] after
-    [induction p],
-    [time_step] unfolds [T_get] once, poses the induction hypothesis and the bounds of the
-    callees, and closes the goal with [nia].
+    The steps of [time_step] are tactics of their own, for proofs by hand: [time_unfold] (in
+    Time), [time_simpl], [time_cbn], [time_pose] and [time_lin].  [loop_bound] and [amortise]
+    apply the potential lemmas of Loop and Amortised.
+
+    For example, Std proves [T_length l <= N.of_nat (length l) + 1] by induction on [l] and
+    [time_step].  In the case [x :: l], [time_step] turns [T_length (x :: l)] into
+    [1 + T_length l] and [N.of_nat (length (x :: l))] into [N.of_nat (length l) + 1], and [nia]
+    closes the goal with the induction hypothesis.
 
     Builds on: Time Loop Amortised *)
 
@@ -16,10 +21,17 @@ From Stdlib Require Import PeanoNat Lia NArith.
 From elpi Require Import elpi.
 From Argent Require Import Time Loop Amortised.
 
-(** Hints that discharge the premises of conditional bounds posed by [time_pose]. *)
+(** Hints for the premises of conditional bounds.  When [time_pose] adds a bound
+    [P x -> T_g x <= B], it tries to prove [P x] with [assumption], [lia] or
+    [eauto with time_inv], so add the lemmas about your invariants here.  A premise that none of
+    them proves stays in the hypothesis. *)
 Create HintDb time_inv.
 
-(** * Constant time functions *)
+(** * Constant time functions
+
+    Many time functions do not depend on their arguments.  For example, [T_negb b] is [1]
+    whatever [b] is: the call of [negb] costs 1, and its body makes no other call.
+    [time_simpl] replaces each such application by its numeral. *)
 
 Elpi Tactic time_consts.
 Elpi Accumulate Db argent.time.db.
@@ -49,10 +61,16 @@ solve (goal _ _ Ty _ _ as G) GL :-
   coq.ltac.call "time_change" [trm Ty2] G GL.
 }}.
 
-(** Unfold the time functions whose body is a numeral, then reduce beta, iota and zeta. *)
+(** Replace each application of a time function whose body is a numeral, such as [T_negb b],
+    by the numeral, then reduce beta, iota and zeta redexes. *)
 Ltac time_simpl := elpi time_consts; cbn beta iota zeta.
 
-(** * Posing bounds *)
+(** * Posing bounds
+
+    [time_pose] looks at each application [T_g args] in the goal and adds the bounds that it
+    knows for it as hypotheses, instantiated at [args].  It knows three kinds of bounds: lemmas
+    registered with [TimeBound], the lemma [T_g_le] beside [T_g], and quantified hypotheses
+    whose conclusion bounds [T_g], such as an induction hypothesis or a bound on a companion. *)
 
 (** Split the conjunction [H] of posed bounds into hypotheses, discharging the premises of each
     conditional bound when [assumption], [lia] or [eauto with time_inv] proves them. *)
@@ -73,10 +91,11 @@ Elpi Tactic time_pose.
 Elpi Accumulate Db argent.time.db.
 Elpi Accumulate File argent.time.lib.
 Elpi Accumulate lp:{{
-% The search is deterministic and uses no findall, because type checking and unification of
-% universe-polymorphic terms may declare constraints, which findall forbids.
+% The search for instances is deterministic and uses no findall, because type checking and
+% unification of universe-polymorphic terms may declare constraints, which findall forbids.  The
+% findall in global-provers only reads facts of the database.
 
-% [subs T Acc R]: R adds to Acc the applications in T that are closed under the binders of T.
+% [subs T Acc R]: R is Acc plus the applications in T that use no variable bound inside T.
 pred subs i:term, i:list term, o:list term.
 subs (app L as T) Acc [T|R] :- !, subs-list L Acc R.
 subs (fun _ T B) Acc R :- !, subs T Acc Acc1, under B Acc1 R.
@@ -181,9 +200,10 @@ Ltac time_cases :=
 
 (** * Linear arithmetic over products
 
-    A contract such as [T_get k m <= c_map * (bits k + 1)] multiplies an abstract constant by a
-    size.  After distribution, the goal is linear in products such as [c_map * bits k], which
-    [time_lin] replaces by fresh variables before it calls [lia]. *)
+    A contract of a module type, such as [T_get k m <= c_map * (bits k + 1)], multiplies an
+    abstract constant [c_map] by a size.  Once the products are distributed, such a goal is
+    linear in products such as [c_map * bits k].  [time_lin] adds the facts that multiplying by
+    [c_map] keeps an inequality, replaces each product by a fresh variable, and calls [lia]. *)
 
 (** A marker for a factor whose monotone consequences are already posed. *)
 Definition time_done (c : N) : Prop := True.
@@ -285,18 +305,19 @@ Ltac time_lin :=
   solve [time_has_const; time_distribute; time_mono; time_distribute; time_generalise; lia].
 
 (** A size enters a bound as [N.of_nat] of a [nat], and [cbn] turns the size of a constructor,
-    such as [length (x :: l)], into a successor [S (length l)]. *)
+    such as [length (x :: l)], into a successor [S (length l)].  [time_cbn] rewrites with this
+    lemma, so that [lia] sees [N.of_nat (length l) + 1]. *)
 Lemma time_of_nat_succ (n : nat) : N.of_nat (S n) = (N.of_nat n + 1)%N.
 Proof.
   lia.
 Qed.
 
-(** Compute the specification functions in the goal, and keep the arithmetic of [N] folded.
-    [cbn] would turn [1 + t] into a match on [t], and [N.pos p - 6] into matches on [p] over
-    [Pos.sub_mask], which [lia] cannot read.  So the operations of [N] that [lia] reads stay
-    folded, and so does [N.of_nat], so that [N.of_nat (S n)] becomes [N.of_nat n + 1] and not a
-    positive literal over [Pos.of_succ_nat n].  Size functions such as [N.size_nat] and
-    conversions such as [Z.abs_N] and [N.to_nat] still compute. *)
+(** [time_cbn] computes the functions of the specification in the goal, such as
+    [length (x :: l)], and leaves the arithmetic of [N] alone.  A plain [cbn] would turn
+    [1 + t] into a match on [t], which [lia] cannot read.  So [time_cbn] keeps [N.add], [N.mul],
+    [N.sub], [N.succ], [N.pred], [N.max], [N.min], [N.div], [N.modulo], [N.pow] and [N.of_nat]
+    folded, and then rewrites [N.of_nat (S n)] to [N.of_nat n + 1].  Size functions such as
+    [N.size_nat] and conversions such as [Z.abs_N] and [N.to_nat] still compute. *)
 Ltac time_cbn :=
   cbn -[N.add N.mul N.sub N.succ N.pred N.max N.min N.div N.modulo N.pow N.of_nat];
   rewrite ?time_of_nat_succ.
@@ -338,8 +359,11 @@ solve (goal _ _ Ty _ [] as G) GL :-
 solve _ _ :- coq.ltac.fail _ "time_step: the goal must have the form T_f args <= bound".
 }}.
 
-(** Unfold by one step the time function on the left of a goal [T_f a <= e], or the time
-    function of the given [f]; then simplify, pose the callee bounds and try [nia]. *)
+(** [time_step] works on a goal [T_f args <= e].  It unfolds [T_f] by one step, simplifies,
+    adds the known bounds with [time_pose], and tries [time_lin] and then [nia].  If they fail,
+    it destructs the scrutinees of the matches left in the goal and tries again in every case.
+    When that fails too, it leaves the simplified goal from before the case split.
+    [time_step f] unfolds the time function of [f] instead of the first one on the left. *)
 Tactic Notation "time_step" := elpi time_step.
 Tactic Notation "time_step" constr(f) := elpi time_step ltac_term:(f).
 
@@ -348,10 +372,12 @@ Tactic Notation "time_pose" := elpi time_pose.
 
 (** * Loops and amortisation *)
 
-(** On a goal [T_loop ... s H <= e] or [T_loop_fuel ... s <= e], apply the potential lemma
-    with the invariant [Inv], the potential [Phi] and the stop cost [Tstop].  It leaves the
-    continue obligation, the stop obligation and [Inv s], and tries [lia] on the remaining
-    arithmetic. *)
+(** On a goal [T_loop ... s H <= e] or [T_loop_fuel ... s <= e], [loop_bound Inv Phi Tstop]
+    applies [T_loop_le] or [T_loop_fuel_le] with the invariant [Inv], the potential [Phi] and
+    the cost [Tstop] of the last step.  It leaves three goals: every continuing step keeps [Inv]
+    and pays for itself from [Phi], the last step costs at most [Tstop], and [Inv s].  It also
+    needs [Phi s + Tstop + 1 <= e], which it tries with [lia] and leaves as a fourth goal when
+    [lia] fails. *)
 Ltac loop_bound Inv Phi Tstop :=
   eapply N.le_trans;
   [ first

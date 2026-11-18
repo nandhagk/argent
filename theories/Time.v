@@ -1,12 +1,27 @@
 (** * Time functions
 
-    This file defines the commands that derive a time function [T_f] from the kernel body of a
-    Gallina definition [f], and the databases those commands share.  [T_f] counts the steps of
-    call-by-value evaluation of [f]: one per call of a defined function or closure body.  The
-    count is a binary number of type [N].
+    This file defines [TimeFun].  [TimeFun f] reads the definition of [f] and defines a new
+    function [T_f], which takes the same arguments and returns the number of steps that [f]
+    takes on them.  A step is one call: of a defined function, or of the body of a closure.  The
+    count has type [N], a binary number, so [vm_compute] can evaluate [T_f] even when the count
+    is large.
 
-    For example, [TimeFun length.] defines [T_length] as
-    [fun A => fix T_length l := (1 + match l with [] => 0 | _ :: l' => T_length l' end)%N].
+    For example, the file Std runs [TimeFun length] in a module named [Datatypes], the module
+    of [length], and then [Print Datatypes.T_length] shows this body.
+
+      fun A : Type =>
+      fix T_length (l : list A) : N :=
+        (1 + match l with
+             | [] => 0
+             | _ :: l' => T_length l'
+             end)%N
+
+    The count is 1 for the call of [length], plus, for a non-empty list, the count of the
+    recursive call on its tail.  So [T_length l = N.of_nat (length l) + 1].
+
+    The file also defines the commands that check time functions ([TimeCheck], [TimeAudit]),
+    declare costs by hand ([TimePrim], [TimePrimTable]), steer the translation ([TimeUnfold],
+    [TimeBound]) and test rejections ([TimeFunFails]), and the tactic [time_unfold].
 
     Builds on: Stdlib NArith, rocq-elpi *)
 
@@ -15,14 +30,17 @@ From elpi Require Import elpi.
 
 (** * Databases
 
-    [timed f T_f] records each time function that [TimeFun] declares.  Facts recorded inside a
-    functor are dropped when it ends, so the time function of a functor parameter or of a
-    functor instance is found by the sibling rule instead, as the constant [T_f] beside [f].
-    [prim c e] is the cost of a built-in constant, declared with [TimePrim].  [unfold c] marks a
-    constant that is unfolded before translation, declared with [TimeUnfold].  [bound T_g L]
-    registers a bound lemma for [time_pose], declared with [TimeBound].  [verified f] records
-    that the time function found beside [f] by the sibling rule is the one derived from the body
-    of [f]. *)
+    The commands share one Elpi database, with five kinds of facts.
+    - [timed f T_f]: [TimeFun] defined [T_f], the time function of [f].
+    - [prim c e]: [TimePrim] declared that a call of [c] costs [e].
+    - [unfold-const c]: [TimeUnfold] asked the translation to inline [c].
+    - [bound T_g L]: [TimeBound] registered the lemma [L], a bound on [T_g], for [time_pose].
+    - [verified f]: the constant [T_f] beside [f] was checked against the body of [f].
+
+    Facts recorded inside a functor are dropped when the functor ends.  So when there is no
+    [timed] fact for [f], the lookup falls back to the constant named [T_f] in the module of
+    [f], which the code calls the sibling rule.  That is how a call [M.f] of a functor parameter
+    [M] is charged with [M.T_f]. *)
 
 Elpi Db argent.time.db lp:{{
 pred timed i:gref, o:gref.
@@ -34,11 +52,18 @@ pred verified i:gref.
 
 (** * The translator
 
-    The rules follow docs/design.md, section 2.  Every binder and argument position has a shape:
-    [sh-irr] for types, proofs and predicates, [sh-fn Ss] for functions whose own binders have
-    shapes [Ss], and [sh-val] for data.  A function argument is followed by its companion time
-    function.  Shapes are computed on the callee's generic type, so that they agree with the
-    type of the callee's time function. *)
+    The translator turns the body of a definition into the body of its time function.  It
+    implements the rules of docs/design.md, section 2 (The translation).
+
+    Each binder and each argument has a shape, which decides how the translation treats it.
+    - [sh-irr]: a type, a proof or a predicate.  Extraction erases it, so it costs nothing.
+    - [sh-fn Ss]: a function, whose own binders have the shapes [Ss].  It is followed by its
+      companion, which is its time function.
+    - [sh-val]: data.
+    For example, the binders of [map] are [(A B : Type) (f : A -> B) (l : list A)], with the
+    shapes [sh-irr], [sh-irr], [sh-fn [sh-val]] and [sh-val].  So [T_map] takes
+    [A B f T_f l], where [T_f : A -> N] is the companion of [f].  Shapes are computed on the
+    generic type of the callee, so that they agree with the type of its time function. *)
 
 Elpi File argent.time.lib lp:{{
 
@@ -47,32 +72,43 @@ type sh-irr shape.
 type sh-val shape.
 type sh-fn list shape -> shape.
 
-% Recursive heads under translation: the head term, the number of leading arguments (parameters
-% and their companions) to drop, and the time function to call instead.
+% The predicates below hold only while a part of the translation runs: they are added with =>.
+%
+% [currec H Nc TF]: inside the body of a fixpoint, a call with head H is a recursive call.  It
+% becomes a call of the time function TF without its first Nc arguments, which are the
+% parameters of the definition and their companions.
 pred currec i:term, o:int, o:term.
-% A local function variable and its companion.
+% [tfun X TX]: the local function X has the companion TX.
 pred tfun i:term, o:term.
-% Test mode: errors are recorded in the safe instead of being raised.
+% While TimeFunFails runs, an error records its code in the safe and fails, instead of stopping
+% the command.
 pred expect-error o:safe.
-% Audit mode: every looked-up callee is recorded in the safe.
+% While TimeAudit runs, each callee charged with its time function or its TimePrim cost is
+% recorded in the safe, outside checks of callees, so that the audit visits it next.
 pred callee-safe o:safe.
-% The constant whose time function is being derived, the innermost one first.
+% [deriving GR]: the time function of GR is being derived.  Checking a callee derives its time
+% function too, and the innermost derivation comes first.  Error messages name it.
 pred deriving o:gref.
-% Set while the time function of a callee is derived again to check it.
+% Holds while the time function of a callee is derived again to check it.
 pred verifying.
-% Capture mode: errors are recorded in the safe, with their messages, instead of being raised.
+% While a callee is checked, an error records its code and message in the safe and fails, so
+% that the check can give it as the reason.
 pred capture-error o:safe.
-% The callees whose sibling time function this command has already checked.
+% The callees whose time function this command has already checked.
 pred verify-memo o:safe.
 
 % ---------------------------------------------------------------------------------------------
 % Errors
+%
+% [err Code Msg] stops the command with the message "Argent [Code]: Msg".  Under expect-error
+% or capture-error, it records the error and fails instead.
 
 pred err i:string, i:string.
 err Code Msg :- capture-error S, !, stash_in_safe S (pr Code Msg), fail.
 err Code _ :- expect-error S, !, stash_in_safe S Code, fail.
 err Code Msg :- coq.error {calc ("Argent [" ^ Code ^ "]: " ^ Msg)}.
 
+% Terms and global references as text, for messages.
 pred tstr i:term, o:string.
 tstr T S :- coq.term->string T S.
 
@@ -81,11 +117,17 @@ gstr GR S :- coq.gref->string GR S.
 
 % ---------------------------------------------------------------------------------------------
 % Types, shapes and time types
+%
+% The time type of a function type is the type of its time functions.  For example, the time
+% type of (A -> B) -> list A -> list B is (A -> B) -> (A -> N) -> list A -> N: the result
+% becomes N, and the function argument gets its companion.
 
+% [wh T R]: R is the weak head normal form of T.
 pred wh i:term, o:term.
 wh T R :- (T = prod _ _ _ ; T = sort _), !, R = T.
 wh T R :- coq.reduction.lazy.whd T R.
 
+% [ends-sort T]: T is an arity, a type that ends in a sort, such as Type or A -> Prop.
 pred ends-sort i:term.
 ends-sort T :- wh T T1, ends-sort-whd T1.
 
@@ -93,17 +135,20 @@ pred ends-sort-whd i:term.
 ends-sort-whd (sort _).
 ends-sort-whd (prod N D B) :- pi x\ decl x N D => ends-sort (B x).
 
-% A type is irrelevant when it is an arity or lives in Prop or SProp.
+% [irr D]: a binder of type D is irrelevant: extraction erases it, so it costs nothing.  D is
+% an arity (the binder is a type or a predicate), or D lives in Prop or SProp (a proof).
 pred irr i:term.
 irr D :- ends-sort D, !.
 irr D :- coq.typecheck D S ok, wh S S1, (S1 = sort prop ; S1 = sort sprop), !.
 
+% [shape-of D S]: S is the shape of a binder of type D.
 pred shape-of i:term, o:shape.
 % The output is unified after the cuts, so that a caller with a bound output cannot skip a guard.
 shape-of D S :- irr D, !, S = sh-irr.
 shape-of D S :- wh D (prod _ _ _), !, binder-shapes D Ss, S = sh-fn Ss.
 shape-of _ S :- S = sh-val.
 
+% [binder-shapes T Ss]: Ss are the shapes of the binders of T, in order.
 pred binder-shapes i:term, o:list shape.
 binder-shapes T Ss :- wh T T1, binder-shapes-whd T1 Ss.
 
@@ -115,10 +160,11 @@ binder-shapes-whd _ [].
 pred is-fn i:shape.
 is-fn (sh-fn _).
 
+% [tname X TX]: the companion of the binder X is named T_X.
 pred tname i:name, o:name.
 tname N TN :- coq.name->id N S, coq.id->name {calc ("T_" ^ S)} TN.
 
-% [tau T Ss TT]: the time type of T, following the binder shapes Ss.
+% [tau T Ss TT]: TT is the time type of T, whose binders have the shapes Ss.
 pred tau i:term, i:list shape, o:term.
 tau _ [] {{ N }} :- !.
 tau T [S|Ss] R :- wh T (prod N D B), tau-binder N D S B Ss R.
@@ -128,7 +174,9 @@ tau-binder N D (sh-fn Sub) B Ss (prod N D (x\ prod TN TD (_\ R x))) :- !,
   tau D Sub TD, tname N TN, pi x\ decl x N D => tau (B x) Ss (R x).
 tau-binder N D _ B Ss (prod N D R) :- pi x\ decl x N D => tau (B x) Ss (R x).
 
-% [shift Ss I J]: the structural index I of a fix becomes J once companions are inserted.
+% [shift Ss I J]: the structural argument of a fix moves from index I to index J once the
+% companions are inserted.  For example, (f : A -> B) (l : list A) with l at index 1 becomes
+% (f : A -> B) (T_f : A -> N) (l : list A) with l at index 2.
 pred shift i:list shape, i:int, o:int.
 shift _ 0 0 :- !.
 shift [S|Ss] I J :- I1 is I - 1, shift Ss I1 J1, shift-step S J1 J.
@@ -140,22 +188,28 @@ shift-step _ J1 J :- J is J1 + 1.
 % ---------------------------------------------------------------------------------------------
 % Small term utilities
 
+% [zero C]: C is the literal 0 of N.
 pred zero i:term.
 zero {{ 0%N }}.
 
+% [plus A B C]: C is A + B in N, leaving out a literal 0.
 pred plus i:term, i:term, o:term.
 plus A B B :- zero A, !.
 plus A B A :- zero B, !.
 plus A B {{ (lp:A + lp:B)%N }}.
 
+% [beta-app F Xs R]: R is F applied to Xs, with the redexes of the leading lambdas of F
+% reduced.
 pred beta-app i:term, i:list term, o:term.
 beta-app (fun _ _ B) [X|Xs] R :- !, beta-app (B X) Xs R.
 beta-app F Xs R :- coq.mk-app F Xs R.
 
+% [head-gref H GR]: H is the global reference GR, with or without a universe instance.
 pred head-gref i:term, o:gref.
 head-gref (global GR) GR.
 head-gref (pglobal GR _) GR.
 
+% List helpers.  take-exact fails when the list is too short.
 pred take-exact i:int, i:list A, o:list A.
 take-exact 0 _ [] :- !.
 take-exact N [X|Xs] [X|Ys] :- M is N - 1, take-exact M Xs Ys.
@@ -179,28 +233,37 @@ mk-let N T V B (let N T V B).
 
 % ---------------------------------------------------------------------------------------------
 % Lookup
+%
+% A callee f is charged with the time function that TimeFun recorded for it, or else with the
+% constant T_f in the module of f (the sibling rule).  A sibling that has a body is checked
+% before it is used: it must be what the translator derives from the body of f.
 
-% The sibling rule: [<path>.<Pre><id><Suf>], resolved through every suffix of the path of GR,
-% accepted only when its own path equals the path of GR.
+% [sibling GR Pre Suf TGR]: TGR is the constant named Pre ^ id ^ Suf in the module of GR, where
+% id is the name of GR.  For example, the sibling of M.get with Pre = "T_" and Suf = "" is
+% M.T_get.  The name is looked up under every suffix of the module path, longest first, and a
+% hit counts only when it lives in the module of GR.
 pred sibling i:gref, i:string, i:string, o:gref.
 sibling GR Pre Suf TGR :-
   coq.gref->path GR P, coq.gref->id GR Id, Name is Pre ^ Id ^ Suf,
   suffix P Q, std.append Q [Name] L, std.string.concat "." L S,
   coq.locate-all S Locs, std.mem Locs (loc-gref TGR), coq.gref->path TGR P, !.
 
+% [lookup GR TGR]: TGR is the time function of GR, recorded by TimeFun or found as a sibling.
 pred lookup i:gref, o:gref.
 lookup GR TGR :- timed GR TGR, !.
 lookup GR TGR :- GR = const _, sibling GR "T_" "" TGR, !.
 
+% [record GR]: during an audit, remember that the translation charged the callee GR.
 pred record i:gref.
 record GR :- callee-safe S, not verifying, !, stash_in_safe S GR.
 record _.
 
 % [check-callee GR TGR]: TGR, the time function that lookup found for the callee GR, may be
-% used.  A time function recorded by TimeFun, or one without a body (a parameter of a functor),
-% is used as it is.  A sibling with a body must be the one derived from the body of GR; the
-% check derives it again, which checks the callees of GR in turn, and is remembered for the rest
-% of the command and, through the database, for later commands.
+% used.  A time function recorded by TimeFun is used as it is, and so is one without a body,
+% such as a Parameter of a module type.  An alias, such as a constant of Module K := K0, is
+% checked through the constant it names.  Any other sibling must be what the translator derives
+% from the body of GR: the check derives it again, which checks the callees of GR in turn.  A
+% check runs once per command, and its result is also stored for later commands.
 pred check-callee i:gref, i:gref.
 check-callee GR TGR :- timed GR TGR, !.
 check-callee _ (const TC) :- coq.env.const-body TC none, !.
@@ -210,12 +273,15 @@ check-callee GR _ :- verified GR, !.
 check-callee GR _ :- verify-memo S, open_safe S Done, std.mem! Done GR, !.
 check-callee GR TGR :- new_safe E, verify-callee E GR TGR, remember-verified GR.
 
-% [alias-of C G]: the body of C is the constant G.  The constants of a module alias, such as
-% [Module K := K0.], read this way, and so do [Definition f := g.] and [Definition T_f := T_g.],
-% which cost what g and T_g cost, since extraction defines f as g.
+% [alias-of C G]: the body of C is the constant G.  The constants of a module alias such as
+% Module K := K0 read this way, and so do Definition f := g and Definition T_f := T_g.
+% Extraction defines f as g, so a call of f costs what a call of g costs.
 pred alias-of i:constant, o:gref.
 alias-of C G :- coq.env.const-body C (some Bo), (Bo = global G ; Bo = pglobal G _), !.
 
+% [verify-callee E GR TGR]: derive the time function of GR again, with errors captured in E,
+% and require it to be convertible with the body of TGR.  Fail with E_CHECK when it differs or
+% when it cannot be derived.
 pred verify-callee i:safe, i:gref, i:gref.
 verify-callee E GR (const TC) :- coq.env.const-body TC (some Old),
   (capture-error E => verifying => derive-owner GR (const TC) New), !,
@@ -230,14 +296,17 @@ verify-callee E GR TGR :- open_safe E Errs, first-error Errs Why,
 pred derive-owner i:gref, i:gref, o:term.
 derive-owner GR TGR New :- owner GR TGR G0, derive G0 Rs, std.mem Rs (res G0 New), !.
 
+% The name of the definition being derived, for messages.
 pred caller-name o:string.
 caller-name S :- deriving GR, !, gstr GR S.
 caller-name "the definition".
 
+% The first captured error, as text.
 pred first-error i:list (pair string string), o:string.
 first-error [pr Code Msg|_] S :- !, S is "[" ^ Code ^ "] " ^ Msg.
 first-error [] "its body cannot be translated".
 
+% Remember that GR passed its check, in the memo of this command and in the database.
 pred remember-verified i:gref.
 remember-verified GR :- verify-memo S, !, stash_in_safe S GR, store-verified GR.
 remember-verified GR :- store-verified GR.
@@ -248,11 +317,14 @@ store-verified _ :- expect-error _, !.
 store-verified GR :-
   @global! => coq.elpi.accumulate execution-site "argent.time.db" (clause _ _ (verified GR)).
 
+% [unfold-head H Bo]: H is a constant marked by TimeUnfold, and Bo is its body.
 pred unfold-head i:term, o:term.
 unfold-head (global (const C)) Bo :- unfold-const (const C), !, coq.env.const-body C (some Bo).
 unfold-head (pglobal (const C) I) Bo :- unfold-const (const C), !,
   @uinstance! I => coq.env.const-body C (some Bo).
 
+% The names of the well-founded recursors of the standard library.  A call of one that has no
+% time function is rejected with E_WF and advice on how to write the definition.
 pred wf-name i:string.
 wf-name Id :- std.mem! ["Fix_F", "Fix", "Fix_F_2", "Fix2", "Fix_sub", "Fix_F_sub", "Acc_rect",
   "Acc_rec", "Acc_iter", "well_founded_induction", "well_founded_induction_type",
@@ -260,6 +332,11 @@ wf-name Id :- std.mem! ["Fix_F", "Fix", "Fix_F_2", "Fix2", "Fix_sub", "Fix_F_sub
 
 % ---------------------------------------------------------------------------------------------
 % Cost of a term in a value position: T⟦e⟧
+%
+% [cost E C]: C is T⟦E⟧, the number of steps that evaluating E takes, as a term of type N.
+% Variables, types, proofs and constructors are free, and a call costs its arguments plus what
+% the time function of the callee says.  For example, the cost of x :: append r l2 is
+% T_append r l2.
 
 pred cost i:term, o:term.
 cost (app [H]) C :- !, cost H C.
@@ -296,6 +373,8 @@ subst-ok _ A :- name A, !.
 subst-ok _ (fun _ _ _) :- !.
 subst-ok T _ :- irr T.
 
+% let x := v in b costs v once, plus b.  A let of a type or a proof is substituted, and a let
+% of a function also binds its companion (fn-let).
 pred cost-let i:name, i:term, i:term, i:(term -> term), o:term.
 cost-let _ T V B C :- irr T, !, cost (B V) C.
 cost-let N T V B C :- shape-of T (sh-fn Ss), !, fn-let N T V B Ss C.
@@ -309,11 +388,15 @@ fn-let N T V B Ss C :-
   (pi x\ def x N T V => pi tx\ def tx TN TT TV => tfun x tx => cost (B x) (CB x tx)),
   plus CV (let N T V (x\ let TN TT TV (CB x))) C.
 
+% A match applied to arguments is accepted when the arguments are types or proofs (a convoy).
+% A match that returns a function, applied to data, is rejected with E_MATCH_FN.
 pred convoy-args i:list term.
 convoy-args Xs :- std.forall Xs (x\ sigma T\ coq.typecheck x T ok, irr T), !.
 convoy-args _ :-
   err "E_MATCH_FN" "a match returns a function that is applied to data; eta-expand the match".
 
+% A primitive projection s.(p) costs what s costs.  A function taken from a record field has
+% no time function, so a call of it is rejected with E_NO_TIME.
 pred proj-cost i:term, i:list term, o:term.
 proj-cost S [] C :- !, cost S C.
 proj-cost S _ _ :-
@@ -322,6 +405,10 @@ proj-cost S _ _ :-
 % ---------------------------------------------------------------------------------------------
 % Calls
 
+% [head-call H As C]: C is the cost of the call H As: the cost of the arguments plus the cost
+% of the call itself.  A TimeUnfold constant is inlined first.  A call with fewer arguments than
+% binders is a partial application, which is rejected here with E_CLOSURE, and one with more
+% arguments is rejected by overapp.
 pred head-call i:term, i:list term, o:term.
 head-call H As C :- unfold-head H Bo, !, coq.mk-app Bo As T, cost T C.
 head-call H As C :-
@@ -365,10 +452,12 @@ pred returns-fn i:list shape, i:term.
 returns-fn [] D :- not (irr D), wh D (prod _ _ _).
 returns-fn [_|Ss] D :- wh D (prod N T B), pi x\ decl x N T => returns-fn Ss (B x).
 
+% The type of the head of a call.
 pred head-type i:term, o:term.
 head-type H Ty :- coq.typecheck H Ty ok, !.
 head-type H _ :- err "E_TERM" {calc ("cannot type the head " ^ {tstr H})}.
 
+% A constructor with a function argument would store a closure in data: E_CLOSURE_DATA.
 pred check-constructor i:term, i:list shape.
 check-constructor H Ks :- head-gref H (indc _), std.exists Ks is-fn, !,
   err "E_CLOSURE_DATA" {calc ("closure stored in data, constructor " ^ {tstr H})}.
@@ -381,11 +470,16 @@ args _ [] [] {{ 0%N }} [] :- !.
 args HTy [S|Ss] [A|As] C As2 :- wh HTy (prod _ D B),
   arg S D A CA As2a, args (B A) Ss As C0 As2b, plus CA C0 C, std.append As2a As2b As2.
 
+% One argument.  A type or a proof costs nothing.  A function costs the creation of its
+% closure and is followed by its time function.  Data costs its evaluation.
 pred arg i:shape, i:term, i:term, o:term, o:list term.
 arg sh-irr _ A {{ 0%N }} [A] :- !.
 arg (sh-fn Sub) D A CA [A, TA] :- !, fntime A Sub D CA TA.
 arg sh-val D A CA [A] :- val-arg D A CA.
 
+% A data argument.  A function passed where the generic type of the callee has data is
+% rejected with E_CLOSURE_DATA, because the time function of the callee has no companion for
+% it.
 pred val-arg i:term, i:term, o:term.
 val-arg D _ {{ 0%N }} :- irr D, !.
 val-arg D A _ :- wh D (prod _ _ _), !,
@@ -393,7 +487,12 @@ val-arg D A _ :- wh D (prod _ _ _), !,
     " is passed where the callee expects data of type " ^ {tstr D})}.
 val-arg _ A C :- cost A C.
 
-% [call H Ks As2 R]: the cost of the call itself, given the arguments with companions.
+% [call H Ks As2 R]: R is the cost of the call itself, given the arguments As2 with their
+% companions.  The clauses, in order: a constructor is free; a recursive call becomes a call of
+% the time function under translation; a constant applied only to types and proofs is free,
+% because extraction evaluates it once at start-up; a constant with a time function calls it,
+% after the check; a local function calls its companion; a TimePrim constant costs its declared
+% cost; a local fix gets a time function of its own; anything else has no time function.
 pred call i:term, i:list shape, i:list term, o:term.
 call H _ _ {{ 0%N }} :- head-gref H (indc _), !.
 call H _ As2 R :- currec H Nc TF, !, drop-n Nc As2 Rest, beta-app TF Rest R.
@@ -405,6 +504,7 @@ call H _ As2 R :- head-gref H GR, prim GR E, !, record GR, beta-app E As2 R.
 call H _ As2 R :- local-fix-time H TH, !, coq.mk-app TH As2 R.
 call H _ _ _ :- no-time H.
 
+% The error for a callee without a time function, naming the likely cause.
 pred no-time i:term.
 no-time H :- head-gref H (const C), coq.env.opaque? C, !,
   err "E_OPAQUE" {calc ("the opaque constant " ^ {tstr H} ^
@@ -440,9 +540,15 @@ functor-hint S :- S is "; a TimeFun for a constant of another library, a TimePri
   "TimeUnfold that ran inside a functor is lost at the end of the functor, so run it outside".
 
 % ---------------------------------------------------------------------------------------------
-% Function values: C⟦e⟧ and F⟦e⟧, for a slot whose binders have shapes Ss and whose
-% instantiated type is D.
+% Function values: C⟦e⟧ and F⟦e⟧
+%
+% A function passed as an argument has two costs.  C⟦e⟧ is paid once, when the closure is
+% created, and F⟦e⟧ is its time function, which is passed as its companion.  For example, the
+% closure fun n => n + n has C = 0 and F = fun n => 1 + Nat.T_add n n, and the partial
+% application Nat.add k has C = T⟦k⟧ and F = fun n => Nat.T_add k n.
 
+% [fntime E Ss D C F]: C is C⟦E⟧ and F is F⟦E⟧, for a slot whose binders have the shapes Ss and
+% whose instantiated type is D.  F is eta-expanded over those binders.
 pred fntime i:term, i:list shape, i:term, o:term, o:term.
 fntime X _ _ {{ 0%N }} TX :- tfun X TX, !.
 fntime (app [H]) Ss D C F :- !, fntime H Ss D C F.
@@ -461,6 +567,8 @@ fntime (app [primitive (proj _ _)|_] as P) _ _ _ _ :- !,
 fntime (app [H|As]) Ss D C F :- !, partial-app H As Ss D C F.
 fntime H Ss D C F :- partial-app H [] Ss D C F.
 
+% A let in front of a function value.  A let of a type or a proof is substituted, a let of
+% data is kept in both C and F, and a let of a function is not supported there.
 pred fn-let-val i:name, i:term, i:term, i:(term -> term), i:list shape, i:term, o:term,
   o:term.
 fn-let-val _ T V B Ss D C F :- irr T, !, fntime (B V) Ss D C F.
@@ -482,6 +590,8 @@ partial-app H As Ss D C F :-
   partial-body H As K,
   eta Ss D [] [] K F.
 
+% The body of F for h ā: 1 when h is a constructor, else the cost of the call of h on ā and
+% the new arguments.
 pred partial-body i:term, i:list term, o:(pred i:list term, i:list term, o:term).
 partial-body H _ (_\ _\ r\ r = {{ 1%N }}) :- head-gref H (indc _), !.
 partial-body H As (xs\ _\ r\ full-call H As xs r).
@@ -493,10 +603,12 @@ full-call H As Xs R :-
   (take-exact N HSs Ks, ! ; overapp H),
   args HTy Ks All _ As2, call H Ks As2 R.
 
+% The body of F for a closure fun x̄ => b: 1 + T⟦b⟧, where the 1 is the call of the closure.
 pred lam-body i:term, i:list term, i:list term, o:term.
 lam-body L Xs _ R :- coq.mk-app L Xs T, cost T C, plus {{ 1%N }} C R.
 
-% [eta Ss D Xs Xps K F]: λ x̄⁺ over the binders of D with shapes Ss, then K x̄ x̄⁺.
+% [eta Ss D Xs Xps K F]: F is fun x̄⁺ => K x̄ x̄⁺ over the binders of D, whose shapes are Ss.
+% In x̄⁺, each function binder is followed by its companion.  Xs and Xps collect x̄ and x̄⁺.
 pred eta i:list shape, i:term, i:list term, i:list term,
   i:(pred i:list term, i:list term, o:term), o:term.
 eta [] _ Xs Xps K R :- !, K Xs Xps R.
@@ -513,7 +625,13 @@ eta-binder N Dx _ B Ss Xs Xps K (fun N Dx R) :-
 
 % ---------------------------------------------------------------------------------------------
 % Matches
+%
+% A match costs its scrutinee plus the branch that runs.  So match e with p => b end becomes
+% T⟦e⟧ + match e return N with p => T⟦b⟧ end, and the match is left out when every branch
+% costs 0.
 
+% [costm E R Bs Xs C]: C is the cost of the match on E with return clause R and branches Bs,
+% applied to the convoy arguments Xs.
 pred costm i:term, i:term, i:list term, i:list term, o:term.
 costm E Rty Bs Xs C :-
   std.length Xs K, scrut-cost E CE, retnat K Rty Rty2 I,
@@ -522,10 +640,12 @@ costm E Rty Bs Xs C :-
   std.map2 Ar Bs (a\ b\ c\ br a K b c) Bs2,
   match-result E Rty2 Bs2 Xs M, plus CE M C.
 
+% A scrutinee that is a proof costs nothing.
 pred scrut-cost i:term, o:term.
 scrut-cost E {{ 0%N }} :- coq.typecheck E T ok, irr T, !.
 scrut-cost E C :- cost E C.
 
+% A match whose branches all cost 0 costs 0.
 pred match-result i:term, i:term, i:list term, i:list term, o:term.
 match-result _ _ Bs _ {{ 0%N }} :- std.forall Bs zb, !.
 match-result E R Bs Xs M :- coq.mk-app (match E R Bs) Xs M.
@@ -534,17 +654,19 @@ pred zb i:term.
 zb (fun _ _ B) :- !, pi x\ zb (B x).
 zb Z :- zero Z.
 
+% [nprods T N]: T has N leading products.
 pred nprods i:term, o:int.
 nprods (prod _ _ B) N :- !, pi x\ nprods (B x) M, N is M + 1.
 nprods _ 0.
 
+% The inductive type of a type such as list A.
 pred ind-of i:term, o:inductive.
 ind-of (global (indt I)) I.
 ind-of (pglobal (indt I) _) I.
 ind-of (app [global (indt I)|_]) I.
 ind-of (app [pglobal (indt I) _|_]) I.
 
-% The return clause becomes N (or Π ȳ. N for a convoy of K proofs).
+% The return clause of the match becomes N, or Π ȳ. N for a convoy of K proofs.
 pred retnat i:int, i:term, o:term, o:inductive.
 retnat K (fun N T B) (fun N T R) I :- (pi x\ sigma A B1 C1\ B x = fun A B1 C1), !,
   pi x\ decl x N T => retnat K (B x) (R x) I.
@@ -552,6 +674,7 @@ retnat K (fun N T B) (fun N T R) I :- wh T Ti, ind-of Ti I, !,
   pi x\ decl x N T => retk K (B x) (R x).
 retnat _ R _ _ :- err "E_TERM" {calc ("unsupported match return clause: " ^ {tstr R})}.
 
+% After the K convoy binders, a return type that is a function is rejected with E_MATCH_FN.
 pred retk i:int, i:term, o:term.
 retk 0 T _ :- wh T (prod _ _ _), not (ends-sort T), !,
   err "E_MATCH_FN" {calc ("a match returns a function of type " ^ {tstr T} ^
@@ -561,6 +684,8 @@ retk K T (prod N D R) :- wh T (prod N D B), !, K1 is K - 1,
   pi x\ decl x N D => retk K1 (B x) (R x).
 retk _ T _ :- err "E_TERM" {calc ("unsupported convoy return type: " ^ {tstr T})}.
 
+% [br N K B C]: C is the cost of the branch B, under its N constructor arguments and K convoy
+% binders.
 pred br i:int, i:int, i:term, o:term.
 br 0 0 B C :- !, cost B C.
 br 0 K (fun Na T B) (fun Na T C) :- !, K1 is K - 1, pi x\ decl x Na T => br 0 K1 (B x) (C x).
@@ -570,6 +695,10 @@ br _ _ B _ :- err "E_TERM" {calc ("unsupported match branch: " ^ {tstr B})}.
 
 % ---------------------------------------------------------------------------------------------
 % Fixpoints
+%
+% The time function of a fixpoint is a fixpoint over the same binders, plus companions.  In its
+% body, a recursive call of f becomes a call of T_f, and the other uses of f stay uses of f, so
+% that T_rev mentions rev l' and no bound fix variable.
 
 kind member type.
 % mem Key Value Nc: a member of a fix block, the head term that calls it, the value that
@@ -599,11 +728,15 @@ body-time-ss Bo Ty Ss R :- fntime Bo Ss Ty C F, eta Ss Ty [] [] (eta-top C F) R.
 pred eta-top i:term, i:term, i:list term, i:list term, o:term.
 eta-top C F _ Xps R :- beta-app F Xps FX, plus C FX R0, plus {{ 1%N }} R0 R.
 
+% [tfix N I Ty B Key Val Nc TF]: TF is the time function of the fix with name N, structural
+% index I, type Ty and body B.  The fix variable is replaced by Val, and a call with head Key
+% becomes a recursive call of TF.
 pred tfix i:name, i:int, i:term, i:(term -> term), i:term, i:term, i:int, o:term.
 tfix N I Ty B Key Val Nc (fix TN I2 TTy R) :-
   binder-shapes Ty Ss, tau Ty Ss TTy, shift Ss I I2, tname N TN,
   pi tf\ decl tf TN TTy => currec Key Nc tf => fix-body (B Val) (R tf).
 
+% The same for a mutual block, one member at a time.
 pred tblock i:list member, i:mfix-block, o:mfix-block.
 tblock [mem K V Nc|Ms] (mfix-ty N R Ty B) (mfix-ty TN R2 TTy TB) :- !,
   binder-shapes Ty Ss, tau Ty Ss TTy, shift Ss R R2, tname N TN,
@@ -615,6 +748,7 @@ pred block-names i:mfix-block, o:list name, o:list int.
 block-names (mfix-ty N R _ B) [N|Ns] [R|Rs] :- pi f\ block-names (B f) Ns Rs.
 block-names (mfix-bo _) [] [].
 
+% The structural index of member J of a block.
 pred block-rno i:mfix-block, i:int, o:int.
 block-rno (mfix-ty _ R _ _) 0 R :- !.
 block-rno (mfix-ty _ _ _ B) J R :- J1 is J - 1, pi f\ block-rno (B f) J1 R.
@@ -626,6 +760,7 @@ local-fix-time (mfix J _ Blk) (mfix J I2 TBlk) :-
   block-names Blk Ns Rs, local-members Blk 0 Ns Rs Ms,
   tblock Ms Blk TBlk, block-rno TBlk J I2.
 
+% Each member of a local block stands for itself, the closed fix term.
 pred local-members i:mfix-block, i:int, i:list name, i:list int, o:list member.
 local-members _ _ [] [] [] :- !.
 local-members Blk K [_|Ns] [R|Rs] [mem (mfix K R Blk) (mfix K R Blk) 0|Ms] :-
@@ -633,15 +768,19 @@ local-members Blk K [_|Ns] [R|Rs] [mem (mfix K R Blk) (mfix K R Blk) 0|Ms] :-
 
 % ---------------------------------------------------------------------------------------------
 % The top-level rule
+%
+% TimeFun f takes f := fun params => [fix F args] body and produces
+% T_f := fun params⁺ => [fix T_F args⁺] 1 + T⟦body⟧, where ⁺ inserts the companions.
 
 kind result type.
 % res F TBo: the body of the time function of the constant F.
 type res gref -> term -> result.
 
-% [lams F Ps Nc Target Bo TBo Ms]: Bo is the body of the definition whose head term is F, under
-% the parameters Ps, which with their companions number Nc.  For a mutual block, Target selects
-% the member to translate (none: the member that F names), and Ms lists the members that have a
-% constant, with their index in the block.
+% [lams F Ps Nc Target Bo TBo Ms]: Bo is the body of the definition F under the parameters Ps,
+% which number Nc with their companions, and TBo is its time function.  lams walks the rest of
+% the lambdas, then translates the fix, the mutual block or the plain body.  For a mutual block,
+% Target selects the member to translate (none: the one that F names), and Ms lists the members
+% that have a constant of their own, with their index in the block.
 pred lams i:term, i:list term, i:int, i:option int, i:term, o:term, o:list (pair int gref).
 lams F Ps Nc T (fun N D B) R Ms :- !, shape-of D S, lam-binder F Ps Nc T N D S B R Ms.
 lams F Ps Nc _ (fix N I Ty B) R [pr 0 GR] :- !, head-gref F GR,
@@ -656,6 +795,7 @@ pred target-index i:option int, i:int, o:int.
 target-index none J J.
 target-index (some K) _ K.
 
+% One parameter.  A function parameter also gets its companion.
 pred lam-binder i:term, i:list term, i:int, i:option int, i:name, i:term, i:shape,
   i:(term -> term), o:term, o:list (pair int gref).
 lam-binder F Ps Nc T N D (sh-fn Sub) B (fun N D R) Ms :- !, tau D Sub TD, tname N TN,
@@ -675,6 +815,9 @@ top-members GR F Ps Nc Blk J K [N|Ns] [R|Rs] [M|Mems] Ms :-
   member-of GR F Ps Nc Blk J K N R M Found, K1 is K + 1,
   top-members GR F Ps Nc Blk J K1 Ns Rs Mems Ms0, std.append Found Ms0 Ms.
 
+% Member K of the block stands for F itself when F names it, for its own constant when one with
+% the name of its fix binder exists and has the same body, and for the closed fix term
+% otherwise.
 pred member-of i:gref, i:term, i:list term, i:int, i:mfix-block, i:int, i:int, i:name, i:int,
   o:member, o:list (pair int gref).
 member-of GR F Ps Nc _ J J _ _ (mem F V Nc) [pr J GR] :- !, coq.mk-app F Ps V.
@@ -697,10 +840,12 @@ derive GR Rs :-
   GR = const C, coq.env.global GR F, const-body-at F C Bo,
   deriving GR => (lams F [] 0 none Bo R0 Ms, derive-others F Bo GR R0 Ms Rs).
 
+% The body of a constant, at the universe instance of its head term.
 pred const-body-at i:term, i:constant, o:term.
 const-body-at (pglobal _ I) C Bo :- !, @uinstance! I => coq.env.const-body C (some Bo).
 const-body-at _ C Bo :- coq.env.const-body C (some Bo).
 
+% The time functions of the other members of the block, each translated on its own.
 pred derive-others i:term, i:term, i:gref, i:term, i:list (pair int gref), o:list result.
 derive-others _ _ _ _ [] [] :- !.
 derive-others F Bo GR R0 [pr _ GR|Ms] [res GR R0|Rs] :- !, derive-others F Bo GR R0 Ms Rs.
@@ -710,6 +855,9 @@ derive-others F Bo GR R0 [pr K G|Ms] [res G R|Rs] :-
 % ---------------------------------------------------------------------------------------------
 % Checks before translation
 
+% Only a transparent constant with a body that computes data gets a time function.  An opaque
+% constant or one without a body gives E_OPAQUE, and a type, a predicate, a proof or a reference
+% that is not a constant gives E_NOT_CODE.
 pred check-code i:gref, o:constant.
 check-code (const C) C :- coq.env.opaque? C, !,
   err "E_OPAQUE" {calc ("cannot derive a time function for the opaque constant " ^
@@ -721,6 +869,7 @@ check-code (const C) C :- coq.env.typeof (const C) Ty, irr Ty, !,
 check-code (const C) C :- !.
 check-code GR _ :- err "E_NOT_CODE" {calc ({gstr GR} ^ " is not a defined constant")}.
 
+% A constant gets one time function: E_TIMED when it already has one, or a TimePrim cost.
 pred check-untimed i:gref.
 check-untimed GR :- lookup GR TGR, !,
   err "E_TIMED" {calc ({gstr GR} ^ " already has the time function " ^ {gstr TGR})}.
@@ -753,11 +902,13 @@ check-wf-deps C :- coq.env.const-body C (some Bo), coq.env.term-dependencies Bo 
     "whose time functions Argent.Std derives, or with Argent.Loop.loop or loop_fuel")}.
 check-wf-deps _.
 
+% A well-founded recursor with neither a time function nor a TimePrim cost.
 pred untimed-wf i:gref.
 untimed-wf G :- coq.gref->id G Id, wf-name Id, not (lookup G _), not (prim G _).
 
-% A time function lives beside its constant; for a constant of another module it lives in a
-% module named like the last component of that constant's path.
+% A time function lives beside its constant, or, for a constant of another library, in a module
+% with the same last name as the module of the constant.  For example, TimeFun Nat.add runs in
+% a module named Nat and defines Nat.T_add there.
 pred check-placement i:gref.
 check-placement GR :- coq.gref->path GR P, coq.env.current-path P, !.
 check-placement GR :- coq.gref->path GR P, last-of P M, coq.env.current-path CP,
@@ -770,12 +921,15 @@ check-placement GR :- coq.gref->path GR P, last-of P M,
 % ---------------------------------------------------------------------------------------------
 % Declaring time functions
 
+% The derived time function must type-check, or the command fails with E_ILLTYPED.
 pred check-typed i:gref, i:term, o:term.
 check-typed _ TBo Ty :- coq.typecheck TBo Ty ok, !.
 check-typed GR TBo _ :- coq.typecheck TBo _ (error Msg), !,
   err "E_ILLTYPED" {calc ("the time function of " ^ {gstr GR} ^ " is ill-typed: " ^ Msg ^
     "; a function was probably passed where a polymorphic callee expects data")}.
 
+% [declare R P]: add the constant T_<id>, give it the implicit arguments of its constant, make
+% it simpl never, and record it in the database.
 pred declare i:result, o:pair gref gref.
 declare (res GR TBo) (pr GR (const TC)) :-
   check-typed GR TBo Ty, coq.gref->id GR Id, TId is "T_" ^ Id,
@@ -785,6 +939,7 @@ declare (res GR TBo) (pr GR (const TC)) :-
   @global! => coq.elpi.accumulate execution-site "argent.time.db"
     (clause _ _ (timed GR (const TC))).
 
+% T_f is universe polymorphic when f is.
 pred add-time-const i:gref, i:id, i:term, i:term, o:constant.
 add-time-const GR TId TBo Ty TC :- coq.env.univpoly? GR _, !,
   @univpoly! => coq.env.add-const TId TBo Ty @transparent! TC.
@@ -807,8 +962,9 @@ with-companions [S|Ss] [] Out :- !, with-companions [S|Ss] [explicit] Out.
 with-companions [sh-fn _|Ss] [I|Is] [I, explicit|Out] :- !, with-companions Ss Is Out.
 with-companions [_|Ss] [I|Is] [I|Out] :- with-companions Ss Is Out.
 
-% [timefun S Ns]: derive and declare the time functions; Ns pairs each constant with its new
-% time function, so that later arguments of the same command can see them.
+% [timefun S Ns]: run the checks, then derive and declare the time functions of the constant
+% named S and of the other members of its block.  Ns pairs each constant with its new time
+% function, so that the later names of the same command can call them.
 pred timefun i:string, o:list (pair gref gref).
 timefun S Ns :-
   coq.locate S GR, check-code GR C, check-untimed GR, check-section C, check-wf-deps C,
@@ -821,15 +977,17 @@ check-untimed-res (res GR _) :- check-untimed GR.
 % ---------------------------------------------------------------------------------------------
 % Checking and bounds
 
-% [owner GR TGR G0]: the constant beside the time function TGR with the name of GR.  A module
-% alias such as the parameter of a functor instance names the same constant as G0, but Elpi
-% reads its body as a call of G0.
+% [owner GR TGR G0]: G0 is the constant with the name of GR in the module of the time function
+% TGR.  Through a module alias, such as the parameter of a functor instance, GR names the same
+% constant as G0, but Elpi reads the body of GR as a call of G0, so the check derives G0.
 pred owner i:gref, i:gref, o:gref.
 owner GR TGR G0 :- coq.gref->path TGR P, coq.gref->id GR Id, std.append P [Id] L,
   std.string.concat "." L S, coq.locate-all S Locs, std.mem Locs (loc-gref G0),
   coq.gref->path G0 P, !.
 owner GR _ GR.
 
+% [timecheck GR]: derive the time function of GR again and require it to be convertible with
+% the stored one, or fail with E_CHECK.
 pred timecheck i:gref.
 timecheck GR :- lookup GR (const TC), coq.env.const-body TC (some Old), !,
   owner GR (const TC) G0, derive G0 Rs, std.mem Rs (res G0 New), !,
@@ -851,6 +1009,7 @@ bound-head T G :- time-le T L, head-gref-app L G, !.
 bound-head _ _ :-
   coq.error "TimeBound: the conclusion must have the form (T_g args <= bound)%N".
 
+% The head constant of a term, applied or not.
 pred head-gref-app i:term, o:gref.
 head-gref-app (app [H|_]) G :- head-gref H G.
 head-gref-app H G :- head-gref H G.
@@ -859,8 +1018,9 @@ head-gref-app H G :- head-gref H G.
 
 (** * Commands *)
 
-(** [TimeFun f g ...] derives [T_f], [T_g], ...  For a mutual block it derives a time function
-    for every member that is a constant. *)
+(** [TimeFun f g ...] derives and declares [T_f], [T_g], ..., one name after the other, so a
+    later name may call an earlier one.  For a function of a mutual block, it derives a time
+    function for every member of the block that is a constant. *)
 
 Elpi Command TimeFun.
 Elpi Accumulate Db argent.time.db.
@@ -880,8 +1040,9 @@ with-timed [pr G T|Ns] As :- timed G T => with-timed Ns As.
 
 Elpi Export TimeFun.
 
-(** [TimeCheck f] re-runs the translation of [f] and requires the result to be convertible with
-    the stored [T_f], so that a time function cannot be edited by hand. *)
+(** [TimeCheck f ...] derives the time function of each [f] again and fails unless the result
+    is convertible with the stored [T_f].  So it catches a time function that was written or
+    edited by hand. *)
 
 Elpi Command TimeCheck.
 Elpi Accumulate Db argent.time.db.
@@ -896,9 +1057,9 @@ check-arg A :- coq.error "TimeCheck: expected constant names, got" A.
 
 Elpi Export TimeCheck.
 
-(** [TimeAudit r ...] walks every constant that the roots call, transitively, and fails on a
-    computational constant that has neither a time function nor a [TimePrim] cost.  It also runs
-    [TimeCheck] on every time function it meets. *)
+(** [TimeAudit r ...] follows the calls from the roots [r], transitively.  It runs [TimeCheck]
+    on every time function that it meets, and fails on a called constant that has neither a
+    time function nor a [TimePrim] cost.  Run it on the functions that you extract. *)
 
 Elpi Command TimeAudit.
 Elpi Accumulate Db argent.time.db.
@@ -927,9 +1088,11 @@ audit-one G _ :- err "E_AUDIT" {calc ("TimeAudit: " ^ {gstr G} ^
 
 Elpi Export TimeAudit.
 
-(** [TimePrim c := (e)] declares the cost [e] of a built-in constant [c], whose type is the time
-    type of [c]; [TimePrim c := n] declares a constant cost [n], as a literal of type [N].  It is
-    the only way to declare a cost by hand. *)
+(** [TimePrim c := (e)] declares that a call of [c] costs [e].  Use it for a constant without a
+    usable body, such as an opaque constant or one that extraction replaces with native code.
+    The cost [e] has the time type of [c]: the type of [c], with result [N] and a companion
+    after each function argument.  [TimePrim c := n] declares the constant cost [n].  This is
+    the only way to write a cost by hand, so its uses are the places to review. *)
 
 Elpi Command TimePrim.
 Elpi Accumulate Db argent.time.db.
@@ -970,8 +1133,8 @@ Elpi Export TimePrim.
 
 (** [TimePrimTable] prints every cost declared with [TimePrim], sorted by the full name of its
     constant.  [TimePrimTable c ...] also fails unless the constants with a declared cost are
-    exactly [c ...], so that a test can compare the table with the constants that extraction
-    realises natively. *)
+    exactly [c ...].  A test can run it on the constants of the project's [Extract Constant]
+    directives, so that a cost and its native realisation are added and removed together. *)
 
 Elpi Command TimePrimTable.
 Elpi Accumulate Db argent.time.db.
@@ -1017,8 +1180,10 @@ entry-name (ent S _) S.
 
 Elpi Export TimePrimTable.
 
-(** [TimeUnfold c] makes the translation unfold [c] before translating its calls, so that, for
-    example, an identity-monad [bind m (fun x => k)] is charged as [let x := m in k]. *)
+(** [TimeUnfold c ...] makes the translation inline [c] at every call, before translating it.
+    Then, for example, an identity-monad [bind m (fun x => k)] costs what [let x := m in k]
+    costs.  A recursive constant is rejected, because inlining its fixpoint would hide its time
+    function from its bound; run [TimeFun] on it instead. *)
 
 Elpi Command TimeUnfold.
 Elpi Accumulate Db argent.time.db.
@@ -1049,8 +1214,10 @@ recursive (mfix _ _ _).
 
 Elpi Export TimeUnfold.
 
-(** [TimeBound L] registers the lemma [L : forall x, [P x ->] (T_g x <= B x)%N] for
-    [time_pose].  A lemma named [T_g_le] beside [T_g] is found without registration. *)
+(** [TimeBound L] registers the lemma [L : forall x, [P x ->] (T_g x <= B x)%N] as a bound on
+    [T_g] for [time_pose].  A lemma named [T_g_le] beside [T_g] needs no registration.  Inside a
+    functor, name the lemma [T_g_le], because a registration made there is lost when the
+    functor ends. *)
 
 Elpi Command TimeBound.
 Elpi Accumulate Db argent.time.db.
@@ -1067,7 +1234,7 @@ bound-arg A :- coq.error "TimeBound: expected lemma names, got" A.
 Elpi Export TimeBound.
 
 (** [TimeFunFails "E_CODE" f] succeeds when [TimeFun f] fails with the error code [E_CODE], and
-    declares nothing.  It is the testing aid for rejections. *)
+    declares nothing.  Tests use it to check rejections. *)
 
 Elpi Command TimeFunFails.
 Elpi Accumulate Db argent.time.db.
@@ -1093,10 +1260,11 @@ Elpi Export TimeFunFails.
 
 (** * Unfolding time functions
 
-    [unfold-once T R] unfolds an application of a time function by one step and refolds its
-    recursive calls into the time function itself, then reduces beta and iota redexes.  The
-    tactics [time_unfold] and [time_step] use it in place of [cbn], which never unfolds a time
-    function. *)
+    [unfold-once T R] unfolds an application of a time function by one step, writes its
+    recursive calls as calls of the time function again, and reduces beta, iota and zeta
+    redexes.  For example, it turns [T_length (x :: l)] into [1 + T_length l], where a plain
+    [unfold] would show the [fix].  The tactics [time_unfold] and [time_step] use it, because
+    [cbn] and [simpl] never unfold a time function. *)
 
 Elpi File argent.time.unfold lp:{{
 
@@ -1105,6 +1273,7 @@ unfold-once (app [H|As]) R :- head-gref H (const C), const-body-at H C Bo, !,
   unfold-body H [] Bo As R.
 unfold-once H R :- head-gref H (const C), const-body-at H C Bo, unfold-body H [] Bo [] R.
 
+% Take the parameters, then unfold the fix only when its structural argument is a constructor.
 pred unfold-body i:term, i:list term, i:term, i:list term, o:term.
 unfold-body H Ps (fun _ _ B) [A|As] R :- !, unfold-body H {std.append Ps [A]} (B A) As R.
 unfold-body H Ps (fix _ I _ B) As R :- !, constructor-at I As, coq.mk-app H Ps HP,
@@ -1124,6 +1293,7 @@ constructor-head (global (indc _)).
 constructor-head (pglobal (indc _) _).
 constructor-head (app [H|_]) :- constructor-head H.
 
+% Reduce beta, iota and zeta redexes.
 pred betaiota i:term, o:term.
 betaiota T R :- @redflags! coq.redflags.betaiotazeta => coq.reduction.lazy.norm T R.
 
@@ -1174,7 +1344,8 @@ solve (goal _ _ Ty _ Args as G) GL :- std.map Args arg-gref Gs,
   unfold-heads Gs Ty Ty2, coq.ltac.call "time_change" [trm Ty2] G GL.
 }}.
 
-(** Unfold by one step every application of the time function [t] in the goal whose
-    structural argument is a constructor.  A time function never unfolds under [cbn] or
-    [simpl]. *)
+(** [time_unfold @T_f] unfolds by one step every application of [T_f] in the goal.  When [T_f]
+    is recursive, it unfolds only the applications whose structural argument is a constructor.
+    For example, it turns [T_length (x :: l)] into [1 + T_length l] and leaves [T_length l] as
+    it is.  [cbn] and [simpl] never unfold a time function. *)
 Tactic Notation "time_unfold" constr(t) := elpi time_unfold ltac_term:(t).
