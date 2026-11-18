@@ -1,12 +1,14 @@
 (** * Binary tries over positive keys
 
-    This file defines a binary trie keyed by [positive] with [get], [set] and [remove], derives
-    their time functions, and proves that each costs at most a constant times the bit length of
-    the key.  It also proves a matching lower bound for [get], and it states the complexity of
-    each operation in the notation of [Complexity], with Θ in the worst case for [get].
+    A binary trie stores values under keys of type [positive].  [get], [set] and [remove] read
+    the key one bit at a time, starting from the lowest bit: a 0 ([xO q]) goes to the left
+    child, a 1 ([xI q]) goes to the right child, and the leading 1 ([xH]) stops at the current
+    node.  So each operation visits at most one node per bit of the key.  This file proves
+    those bounds, states them in big-O notation, and shows that [get] can't do better in the
+    worst case.
 
-    For example, [get 6 m] follows the bits of [6 = 1~1~0], so it visits at most three nodes and
-    [T_get 6 m <= 3].
+    For example, [get 6 m] reads [6 = 1~1~0] from the right: left, right, stop.  It visits at
+    most three nodes, so [T_get 6 m <= 3].
 
     Builds on: Time Tactics Complexity Std *)
 
@@ -52,8 +54,8 @@ Fixpoint set {A : Type} (p : positive) (v : A) (m : t A) {struct p} : t A :=
     end
   end.
 
-(** A node with no value and two empty children is a leaf, so that removal keeps tries
-    canonical. *)
+(** [node] builds a node, except that a node with no value and two empty children becomes a
+    leaf.  [remove] uses it so that the trie never keeps empty branches. *)
 Definition node {A : Type} (l : t A) (o : option A) (r : t A) : t A :=
   match l, o, r with
   | Leaf, None, Leaf => Leaf
@@ -71,9 +73,25 @@ Fixpoint remove {A : Type} (p : positive) (m : t A) {struct p} : t A :=
     end
   end.
 
+(** The derived time functions follow the same recursion.  [Print T_get] shows:
+
+      T_get =
+      fix T_get (A : Type) (p : positive) (m : t A) {struct p} : N :=
+        (1 +
+         match m with
+         | Leaf => 0
+         | Node l _ r =>
+             match p with
+             | q~1%positive => T_get A q r
+             | q~0%positive => T_get A q l
+             | 1%positive => 0
+             end
+         end)%N
+
+    [T_node] is the constant 1, and [T_remove] pays [T_node] once per node that it visits. *)
 TimeFun get set node remove.
 
-(** * Functional laws *)
+(** * What the operations do *)
 
 Lemma get_set_same {A : Type} (p : positive) (v : A) (m : t A) : get p (set p v m) = Some v.
 Proof.
@@ -93,7 +111,11 @@ Proof.
     rewrite IH by congruence; rewrite ?get_leaf; reflexivity.
 Qed.
 
-(** * Bounds *)
+(** * Upper bounds *)
+
+(** The three proofs below share one shape: induction on the key, for every trie, then a case
+    on the trie.  In each case [time_step] unfolds the time function once, and the induction
+    hypothesis pays for the call on the rest of the key. *)
 
 (** [get] visits at most one node per bit of the key. *)
 Theorem T_get_le {A : Type} (p : positive) (m : t A) :
@@ -102,27 +124,41 @@ Proof.
   revert m. induction p as [p IH | p IH |]; intros [| l o r]; time_step.
 Qed.
 
-(** [set] visits exactly one node per bit of the key. *)
+(** [set] visits one node per bit of the key. *)
 Theorem T_set_le {A : Type} (p : positive) (v : A) (m : t A) :
   T_set p v m <= N.of_nat (Pos.size_nat p).
 Proof.
   revert m. induction p as [p IH | p IH |]; intros [| l o r]; time_step.
 Qed.
 
-(** [remove] visits at most one node per bit and rebuilds each with [node]. *)
+(** [remove] visits at most one node per bit of the key, and calls [node] once at each. *)
 Theorem T_remove_le {A : Type} (p : positive) (m : t A) :
   T_remove p m <= 2 * N.of_nat (Pos.size_nat p).
 Proof.
   revert m. induction p as [p IH | p IH |]; intros [| l o r]; time_step.
 Qed.
 
-(** On a trie that holds the key, [get] visits one node per bit of the key. *)
+(** * A lower bound *)
+
+(** On a trie that holds the key, [get] visits one node per bit of the key: [set] has built a
+    node for every bit, so [get] never stops early at a leaf. *)
 Theorem T_get_ge {A : Type} (p : positive) (v : A) (m : t A) :
   N.of_nat (Pos.size_nat p) <= T_get p (set p v m).
 Proof.
-  revert m. induction p as [p IH | p IH |]; intros [| l o r]; cbn [set];
-    time_unfold @T_get; cbn [Pos.size_nat]; try pose proof (IH Leaf);
-    try pose proof (IH l); try pose proof (IH r); lia.
+  revert m. induction p as [q IH | q IH |]; intros [| l o r];
+    cbn [set]; time_unfold @T_get; cbn [Pos.size_nat].
+  - (* Key [q~1] in a leaf: [set] builds a right child that holds [q]. *)
+    pose proof (IH Leaf) as Hq. lia.
+  - (* Key [q~1] in a node: [set] puts [q] into the right child [r]. *)
+    pose proof (IH r) as Hq. lia.
+  - (* Key [q~0] in a leaf: [set] builds a left child that holds [q]. *)
+    pose proof (IH Leaf) as Hq. lia.
+  - (* Key [q~0] in a node: [set] puts [q] into the left child [l]. *)
+    pose proof (IH l) as Hq. lia.
+  - (* Key [1] in a leaf: one bit and one step. *)
+    lia.
+  - (* Key [1] in a node: one bit and one step. *)
+    lia.
 Qed.
 
 (** * Complexity *)
@@ -150,7 +186,8 @@ Proof.
   lia.
 Qed.
 
-(** The key [1~1~...~1] with [n] ones after the leading bit. *)
+(** [ones n] is the key [1~1~...~1] with [n] ones after the leading 1, so it has [n + 1]
+    bits. *)
 Fixpoint ones (n : nat) : positive :=
   match n with
   | O => xH
@@ -162,15 +199,20 @@ Proof.
   induction n as [| n IH]; cbn; congruence.
 Qed.
 
-(** In the worst case [get] takes time Θ of the bit length of the key, because on a trie that
-    holds the key it reads every bit, and such tries exist for keys of every length. *)
+(** In the worst case, [get] takes time Θ of the bit length of the key.  The upper bound is
+    [get_complexity].  For the lower bound, [tight_intro] asks for an input of every size [n]
+    on which [get] is slow: the key [ones n] in a trie that holds it. *)
 Theorem get_worst_complexity {A : Type} (a : A) :
   T_get (A := A) p m ∈ Θ_worst(N.of_nat (Pos.size_nat p)) for (p, m).
 Proof.
   apply tight_intro with (c := 1)
     (w := fun n => (ones (N.to_nat n), set (ones (N.to_nat n)) a Leaf)).
-  - exact get_complexity.
-  - intros n. exact I.
-  - intros n. cbn beta iota. rewrite size_nat_ones. lia.
-  - intros n. cbn beta iota. pose proof (T_get_ge (ones (N.to_nat n)) a Leaf) as Hhit. lia.
+  - (* The upper bound. *)
+    exact get_complexity.
+  - (* Every input satisfies the precondition, which is [True]. *)
+    intros n. exact I.
+  - (* The key [ones n] has at least [n] bits. *)
+    intros n. cbn beta iota. rewrite size_nat_ones. lia.
+  - (* On that input, [get] takes at least one step per bit, by [T_get_ge]. *)
+    intros n. cbn beta iota. pose proof (T_get_ge (ones (N.to_nat n)) a Leaf) as Hhit. lia.
 Qed.

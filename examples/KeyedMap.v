@@ -1,14 +1,17 @@
 (** * Maps over abstract keys
 
-    This file shows the signature convention.  A signature has a functional layer, the
-    operations and their laws, and a time layer: a time function per operation, a named
-    constant and a contract that bounds the time function by the constant.  [TrieMap] builds a
-    map from any [KEY] on the trie of Trie.v and discharges the contracts.  [SumValues] is a
-    client functor over an abstract [MAP]; it derives its own time function and proves its
-    bound from the contracts of [MAP] alone, so it cannot depend on the costs of a backend.
+    Code that is generic over a module gets its bounds from the module's signature.  So a
+    signature here has two layers.  The functional layer declares the operations and their
+    laws, as usual.  The time layer declares, for each operation, its time function, a named
+    constant, and a contract that bounds the time function using that constant.  Every
+    implementation proves the contracts for its own constant.  A client functor can only use
+    the contracts, so its bounds hold for every implementation.
 
-    For example, [NatSum.sum_values [0; 2] m] adds the values that [m] holds at keys 0 and 2,
-    in time linear in the key lengths and in those values.
+    [TrieMap] implements [MAP] on the trie of Trie.v, for any [KEY].  [SumValues] is a client
+    functor over [MAP].
+
+    For example, [NatSum.sum_values [0; 2; 5] m] adds the values that [m] holds at the keys 0,
+    2 and 5.  Its time is linear in the lengths of the encoded keys and in the values added.
 
     Builds on: Time Tactics Std Trie *)
 
@@ -19,17 +22,20 @@ Import List.ListNotations.
 
 (** * Signatures *)
 
+(** A key type with an injective encoding into [positive]. *)
 Module Type KEY.
   Parameter t : Type.
   Parameter encode : t -> positive.
   Parameter encode_inj : forall a b, encode a = encode b -> a = b.
-  (* Time layer. *)
+  (** The time layer: [encode k] takes at most [c_encode * (b + 1)] steps, where [b] is the
+      bit length of [encode k]. *)
   Parameter T_encode : t -> N.
   Parameter c_encode : N.
   Parameter T_encode_le :
     forall k, (T_encode k <= c_encode * (N.of_nat (Pos.size_nat (encode k)) + 1))%N.
 End KEY.
 
+(** Finite maps from [K.t] to values. *)
 Module Type MAP.
   Declare Module K : KEY.
   Parameter t : Type -> Type.
@@ -39,7 +45,9 @@ Module Type MAP.
   Parameter get_empty : forall A k, get k (@empty A) = None.
   Parameter get_set_same : forall A k (v : A) m, get k (set k v m) = Some v.
   Parameter get_set_other : forall A k k' (v : A) m, k <> k' -> get k' (set k v m) = get k' m.
-  (* Time layer. *)
+  (** The time layer: [get k m] and [set k v m] take at most [c_map * (b + 1)] steps, where
+      [b] is the bit length of [K.encode k].  [T_get] and [T_set] are the names that [TimeFun]
+      looks for, so a client's [TimeFun] charges a call of [M.get] with [M.T_get]. *)
   Parameter T_get : forall {A : Type}, K.t -> t A -> N.
   Parameter T_set : forall {A : Type}, K.t -> A -> t A -> N.
   Parameter c_map : N.
@@ -63,6 +71,8 @@ Module TrieMap (K0 : KEY) <: MAP with Module K := K0.
 
   Definition set {A : Type} (k : K.t) (v : A) (m : t A) : t A := Trie.set (K.encode k) v m.
 
+  (** [T_get k m = 1 + K.T_encode k + Trie.T_get (K.encode k) m]: one step for the call, the
+      encoding of the key, and the trie lookup.  [T_set] has the same shape. *)
   TimeFun get set.
 
   Lemma get_empty A k : get k (@empty A) = None.
@@ -80,8 +90,12 @@ Module TrieMap (K0 : KEY) <: MAP with Module K := K0.
     intros Hne. apply Trie.get_set_other. intros Heq. apply Hne, K.encode_inj, Heq.
   Qed.
 
+  (** The encoding pays [K.c_encode] per bit, and the trie pays 1 per bit, plus 1 for the
+      call of [get] or [set]. *)
   Definition c_map : N := (K.c_encode + 2)%N.
 
+  (** [time_step] adds the contract [K.T_encode_le] and the trie bound [Trie.T_get_le], and
+      the arithmetic gives the constant [c_map]. *)
   Lemma T_get_le A k (m : t A) :
     (T_get k m <= c_map * (N.of_nat (Pos.size_nat (K.encode k)) + 1))%N.
   Proof.
@@ -100,8 +114,8 @@ End TrieMap.
 Module NatKey <: KEY.
   Definition t : Type := nat.
 
-  (** The key [n] is encoded as [2 ^ n], whose bit length [n + 1] is the size of [n] in
-      unary. *)
+  (** The key [n] is encoded as [2 ^ n].  Its bit length, [n + 1], is the size of [n] in
+      unary, so the encoding takes one step per bit. *)
   Fixpoint encode (n : t) : positive :=
     match n with
     | 0 => xH
@@ -142,6 +156,8 @@ Module SumValues (M : MAP).
       end
     end.
 
+  (** [M.get] has no body here, because [M] is a functor parameter.  [TimeFun] charges a call
+      of [M.get] with the time function that the signature declares, [M.T_get]. *)
   TimeFun sum_values.
 
   (** The total bit length of the encoded keys, each plus one. *)
@@ -151,12 +167,14 @@ Module SumValues (M : MAP).
     | k :: r => Pos.size_nat (M.K.encode k) + 1 + key_work r
     end.
 
-  (** The time of [sum_values] is linear in the encoded key lengths and in the values added,
-      since addition on [nat] is unary.  The proof uses only the contracts of [MAP]. *)
+  (** The time of [sum_values] is linear in the lengths of the encoded keys and in the values
+      added, because addition on [nat] is unary.  The proof uses only the contract
+      [M.T_get_le], so it holds for every implementation of [MAP]. *)
   Theorem T_sum_values_le (ks : list M.K.t) (m : M.t nat) :
     (T_sum_values ks m <=
      (M.c_map + 2) * N.of_nat (key_work ks) + N.of_nat (sum_values ks m) + 1)%N.
   Proof.
+    (* Per key: one call, the lookup, and an addition when the key is present. *)
     induction ks as [| k r IH]; time_step.
   Qed.
 

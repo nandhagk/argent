@@ -1,11 +1,16 @@
 (** * Loops bounded by a potential
 
-    This file uses the two loop combinators of Loop.v.  [countdown] iterates over an
-    accessibility proof of [lt], which [Acc_intro_generator] unfolds lazily, so it runs under
-    [vm_compute] and extracts with no fuel.  [count] iterates with fuel computed from the data.
-    Both bounds come from the potential lemmas and do not depend on the proof or the fuel.
+    A loop that doesn't recurse on a smaller piece of its input needs another argument for
+    termination.  Loop.v offers two.  [loop] recurses on a proof that the state decreases (an
+    accessibility proof): it needs no fuel, and it extracts to a plain recursive function.
+    [loop_fuel] takes a [nat] bound on the number of iterations, called fuel.  Either way, the
+    time comes from a potential [Phi] on the states: when every step that continues makes
+    [Phi] drop by more than the step costs, the loop costs at most [Phi] of the first state,
+    plus the cost of the last step, plus one.  The bound depends neither on the proof nor on
+    the fuel.
 
-    For example, [countdown 3] steps from 3 to 0 and stops, so it costs at most [2 * 3 + 3].
+    For example, [countdown 3] steps from 3 to 2, 1 and 0, and stops there.  With the
+    potential [2 * n], its time is at most [2 * 3 + 3].
 
     Builds on: Time Tactics Loop Std *)
 
@@ -15,8 +20,8 @@ Import List.ListNotations.
 
 (** * A loop over an accessibility proof *)
 
-(** One step of the countdown: a smaller state, with the proof that it is smaller, or the
-    result. *)
+(** One step of the countdown.  From [S m] it continues with [m], together with a proof that
+    [m < S m].  At 0 it stops with the result 0. *)
 Definition count_step (n : nat) : {m : nat | m < n} + nat :=
   match n as k return {m : nat | m < k} + nat with
   | 0 => inr 0
@@ -25,6 +30,10 @@ Definition count_step (n : nat) : {m : nat | m < n} + nat :=
 
 TimeFun count_step.
 
+(** [lt_wf] proves that [lt] is well founded, but its proof ends in [Qed], so it never
+    reduces to a constructor and [loop] can't compute with it.  [Acc_intro_generator 32 lt_wf]
+    puts [2 ^ 32] constructors in front of it, built lazily, so any countdown that ends in
+    fewer than [2 ^ 32] steps runs under [vm_compute]. *)
 Definition countdown (n : nat) : nat := loop lt count_step n (Acc_intro_generator 32 lt_wf n).
 
 TimeFun countdown.
@@ -34,23 +43,37 @@ Proof.
   vm_compute. reflexivity.
 Qed.
 
-(** The countdown from [n] costs at most [2 * n + 3]: each step pays 2 from the potential. *)
-Theorem T_countdown_le (n : nat) : (T_countdown n <= 2 * N.of_nat n + 3)%N.
+(** [T_countdown] calls the time function of [loop], with [T_count_step] as the companion of
+    the step function. *)
+Lemma T_countdown_unfold (n : nat) :
+  T_countdown n =
+  (1 + T_loop lt count_step T_count_step n (Acc_intro_generator 32 lt_wf n))%N.
 Proof.
-  time_unfold @T_countdown.
-  match goal with
-  | |- (1 + ?t <= _)%N => enough (Hloop : (t <= 2 * N.of_nat n + 1 + 1)%N) by lia
-  end.
-  loop_bound (fun _ : nat => True) (fun k : nat => (2 * N.of_nat k)%N) 1%N.
-  - intros [| k] s1 Hlt _ Hstep; cbn in Hstep; [discriminate |].
-    injection Hstep as Hs1. subst s1. split; [exact I |]. time_simpl. lia.
-  - intros s r _ _. time_simpl. lia.
-  - exact I.
+  reflexivity.
 Qed.
 
-(** * A loop with fuel computed from data *)
+(** The countdown from [n] costs at most [2 * n + 3].  The potential [2 * k] drops by 2 at
+    each step, which pays for the step and for its recursive call. *)
+Theorem T_countdown_le (n : nat) : (T_countdown n <= 2 * N.of_nat n + 3)%N.
+Proof.
+  rewrite T_countdown_unfold.
+  (* [T_loop_le] bounds the loop by [Phi n + Tstop + 1], with [Phi k = 2 * k] and [Tstop = 1]. *)
+  enough (Hloop : (T_loop lt count_step T_count_step n (Acc_intro_generator 32 lt_wf n)
+                   <= 2 * N.of_nat n + 1 + 1)%N) by lia.
+  apply (T_loop_le lt count_step T_count_step (fun _ => True) (fun k => 2 * N.of_nat k)%N 1%N).
+  - (* A step from [S k] continues with [k]: it costs 1, and the potential drops by 2. *)
+    intros [| k] s1 Hlt _ Hstep; cbn in Hstep; [discriminate |].
+    injection Hstep as <-. split; [exact I |]. time_simpl. lia.
+  - (* The step at 0 stops, and costs 1. *)
+    intros s r _ _. time_simpl. lia.
+  - (* The invariant is [True]. *)
+    exact I.
+Qed.
 
-(** One step of counting the elements of a list: the count so far and the rest of the list. *)
+(** * A loop with fuel *)
+
+(** One step of counting the elements of a list.  The state is the count so far and the rest
+    of the list. *)
 Definition count_step_fuel (s : nat * list nat) : (nat * list nat) + nat :=
   match s with
   | (c, []) => inr c
@@ -59,7 +82,8 @@ Definition count_step_fuel (s : nat * list nat) : (nat * list nat) + nat :=
 
 TimeFun count_step_fuel.
 
-(** The fuel [length l + 1] suffices; the bound does not depend on it. *)
+(** Each step removes one element, so the fuel [length l + 1] is enough.  The bound below
+    holds for any fuel, though, because a loop that runs out of fuel only stops earlier. *)
 Definition count (l : list nat) : (nat * list nat) + nat :=
   loop_fuel count_step_fuel (length l + 1) (0, l).
 
@@ -67,20 +91,33 @@ TimeFun count.
 
 Example count_runs : count [5; 6; 7] = inr 3 := eq_refl.
 
+(** [T_count l] is 1, plus the cost of computing the fuel, plus the cost of the loop. *)
+Lemma T_count_unfold (l : list nat) :
+  T_count l =
+  (1 + (Datatypes.T_length l + Nat.T_add (length l) 1
+        + T_loop_fuel count_step_fuel T_count_step_fuel (length l + 1) (0%nat, l)))%N.
+Proof.
+  reflexivity.
+Qed.
+
 (** Counting a list costs at most [4 * length l + 5], including the computation of the fuel. *)
 Theorem T_count_le (l : list nat) : (T_count l <= 4 * N.of_nat (length l) + 5)%N.
 Proof.
-  time_unfold @T_count. pose proof (Datatypes.T_length_le l) as Hlen.
+  rewrite T_count_unfold.
+  (* Computing the fuel costs at most [length l + 1] for [length], and as much for [+ 1]. *)
+  pose proof (Datatypes.T_length_le l) as Hlength.
   pose proof (Nat.T_add_le (length l) 1) as Hadd.
-  match goal with
-  | |- (1 + (_ + _ + ?t) <= _)%N =>
-    enough (Hloop : (t <= 2 * N.of_nat (length l) + 1 + 1)%N) by lia
-  end.
-  loop_bound (fun _ : nat * list nat => True)
-    (fun s : nat * list nat => (2 * N.of_nat (length (snd s)))%N) 1%N.
-  - intros [c [| x r]] s1 _ Hstep; cbn in Hstep; [discriminate |].
-    injection Hstep as Hs1. subst s1. split; [exact I |]. time_simpl. time_cbn. lia.
-  - intros s r _ _. time_simpl. lia.
-  - exact I.
-  - time_cbn. lia.
+  (* [T_loop_fuel_le] bounds the loop by [Phi (0, l) + Tstop + 1], with
+     [Phi s = 2 * length (snd s)] and [Tstop = 1]. *)
+  enough (Hloop : (T_loop_fuel count_step_fuel T_count_step_fuel (length l + 1) (0%nat, l)
+                   <= 2 * N.of_nat (length l) + 1 + 1)%N) by lia.
+  apply (T_loop_fuel_le count_step_fuel T_count_step_fuel (fun _ => True)
+    (fun s => 2 * N.of_nat (length (snd s)))%N 1%N).
+  - (* A step that continues removes one element: it costs 1, and the potential drops by 2. *)
+    intros [c [| x r]] s1 _ Hstep; cbn in Hstep; [discriminate |].
+    injection Hstep as <-. split; [exact I |]. time_simpl. time_cbn. lia.
+  - (* The step on an empty list stops, and costs 1. *)
+    intros s r _ _. time_simpl. lia.
+  - (* The invariant is [True]. *)
+    exact I.
 Qed.
