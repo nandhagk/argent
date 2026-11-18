@@ -172,7 +172,7 @@ Fixpoint map {A B : Type} (f : A -> B) (l : list A) : list B :=
 (** What [map] costs depends on what [f] costs.  So [T_map] takes one more argument, right
     after [f]: a time function [T_f] for [f], called the companion of [f].
 
-      T_map : forall A B, (A -> B) -> (A -> N) -> list A -> N
+      T_map : forall {A B : Type}, (A -> B) -> (A -> N) -> list A -> N
       T_map f T_f (x :: r) = 1 + (T_f x + T_map f T_f r) *)
 TimeFun map.
 

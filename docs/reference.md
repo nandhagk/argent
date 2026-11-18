@@ -32,8 +32,9 @@ the body of a closure. Each kind of term costs the following.
 | A constant applied only to types and proofs, such as `@nil A` | 0, because the extracted program evaluates it once, at start-up | |
 
 A function argument `g` of `f` gets a *companion* `T_g`, its time function, right after it in
-`T_f`. So `T_map` has the type `forall A B, (A -> B) -> (A -> N) -> list A -> N`. At a call
-site, `TimeFun` derives the companion from the argument itself:
+`T_f`. So `T_map` has the type
+`forall {A B : Type}, (A -> B) -> (A -> N) -> list A -> N`. At a call site, `TimeFun` derives
+the companion from the argument itself:
 
 | Argument | Companion | Cost of creating it |
 | --- | --- | --- |
@@ -369,6 +370,7 @@ Module Type MAP.
   Declare Module K : KEY.
   Parameter t : Type -> Type.
   Parameter get : forall {A : Type}, K.t -> t A -> option A.
+  Parameter set : forall {A : Type}, K.t -> A -> t A -> t A.
   Parameter get_set_same : forall A k (v : A) m, get k (set k v m) = Some v.
   (* The time layer. *)
   Parameter T_get : forall {A : Type}, K.t -> t A -> N.
