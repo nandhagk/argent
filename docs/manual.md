@@ -198,8 +198,7 @@ Qed.
 
 A complexity statement bounds a time function `T` by a measure `g` on the inputs `x` that
 satisfy a precondition `P`. The input is the tuple of all arguments, so the constant of the
-bound does not depend on any of them. `Argent.BigO` defines the upper bound and the worst-case
-tight bound. `Argent.Complexity` re-exports `BigO` and adds the other bounds.
+bound does not depend on any of them. `Argent.Complexity` defines every bound.
 
 | Bound | Constant | Meaning on the inputs that satisfy `P` |
 | --- | --- | --- |

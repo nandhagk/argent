@@ -35,10 +35,9 @@ The library has the following theories, under the logical name `Argent`.
 
 - `Time` holds the translator and the commands `TimeFun`, `TimeCheck`, `TimeAudit`,
   `TimePrim`, `TimePrimTable`, `TimeUnfold` and `TimeBound`.
-- `BigO` defines `bigO` and `tight` with their closure lemmas.
 - `Amortised` proves the potential method for sequences of operations.
-- `Complexity` adds the lower bound Ω, the tight bound Θ, the worst-case lower bound and the
-  amortised bound to those of `BigO`, with their closure lemmas, and the notation
+- `Complexity` defines the upper bound 𝑂, the lower bound Ω, the tight bound Θ, the worst-case
+  bounds and the amortised bound, with their closure lemmas, and the notation
   `T ∈ 𝑂(g) for x | P` for every bound.
 - `Loop` defines a loop over an accessibility proof and a loop with fuel, each with a potential
   lemma that bounds its time independently of the proof and the fuel.

@@ -157,30 +157,25 @@ T_f := λ params⁺. [fix T_F args⁺ {struct i⁺}] 1 + T⟦body[F := f params]
 
 ## 3. The library
 
-The library has seven theories.
+The library has six theories.
 
 - `Time` holds the translator and the commands. `TimeFun` derives time functions. `TimeCheck`
   re-derives and compares. `TimeAudit` walks the constants reachable from roots. `TimePrim`
   declares a built-in cost and is the only way to write one, and `TimePrimTable` lists or
   checks the declared costs. `TimeUnfold` marks a constant that is not recursive to unfold
   before translation. `TimeBound` registers a bound for `time_pose`.
-- `BigO` defines the following, where `X` is the tuple of all inputs, so the constant is
-  uniform over all of them, as Guéneau and others recommend [9].
+- `Amortised` proves `amortised_run` and `amortised_uniform` for a sequence of operations
+  `op : O -> S -> S`, a potential `Phi` and an invariant `Inv` [12].
+- `Complexity` defines the bounds below, where `X` is the tuple of all inputs, so the constant
+  is uniform over all of them, as Guéneau and others recommend [9]. The lower bound is the
+  upper bound with the time and the measure swapped, so each closure lemma of `bigO` gives its
+  mirror in one line. `tight` is the upper bound together with the worst-case lower bound.
 
   ```coq
   Definition bigO {X} (P : X -> Prop) (g T : X -> N) : Prop :=
     exists c, forall x, P x -> T x <= c * (g x + 1).
   Definition tight {X} (P : X -> Prop) (g T : X -> N) : Prop :=
     bigO P g T /\ exists c, forall n, exists x, P x /\ n <= g x /\ g x <= c * T x.
-  ```
-
-- `Amortised` proves `amortised_run` and `amortised_uniform` for a sequence of operations
-  `op : O -> S -> S`, a potential `Phi` and an invariant `Inv` [12].
-- `Complexity` defines the other bounds on the same tuple of inputs. The lower bound is the
-  upper bound with the time and the measure swapped, so each closure lemma of `bigO` gives its
-  mirror in one line. `tight` is the upper bound together with the worst-case lower bound.
-
-  ```coq
   Definition bigOmega {X} (P : X -> Prop) (g T : X -> N) : Prop := bigO P T g.
   Definition bigTheta {X} (P : X -> Prop) (g T : X -> N) : Prop :=
     bigO P g T /\ bigOmega P g T.
