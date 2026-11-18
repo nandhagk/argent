@@ -7,11 +7,11 @@
 
     For example, the extracted [countdown] calls [loop] with [count_step] and its argument.
 
-    Builds on: Time Loop Trie Queue KeyedMap Loops Halving *)
+    Builds on: Time Loop Lists Trie Queue KeyedMap Loops Halving *)
 
 From Stdlib Require Extraction.
 From Argent Require Import Time Loop.
-From Argent.Examples Require Trie Queue KeyedMap Loops Halving.
+From Argent.Examples Require Lists Trie Queue KeyedMap Loops Halving.
 
 Extraction loop.
 
@@ -21,5 +21,6 @@ Recursive Extraction Halving.log2.
 
 (** Every computational constant reachable from the example roots has a checked time function
     or a declared cost. *)
-TimeAudit Trie.get Trie.set Trie.remove Queue.step Loops.countdown Loops.count
+TimeAudit Lists.append Lists.slow_rev Lists.rev_onto Lists.map Lists.add_to_all
+  Trie.get Trie.set Trie.remove Queue.step Loops.countdown Loops.count
   KeyedMap.NatSum.sum_values Halving.log2 Halving.halves.

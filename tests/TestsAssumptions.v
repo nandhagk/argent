@@ -7,11 +7,18 @@
     For example, [Print Assumptions Trie.get_worst_complexity] shows that the worst-case
     tightness of [get] uses no axiom.
 
-    Builds on: Trie Queue KeyedMap Loops Halving Amortised Loop Complexity Std *)
+    Builds on: Lists Trie Queue KeyedMap Loops Halving Amortised Loop Complexity Std *)
 
 From Argent Require Import Amortised Loop Complexity Std.
-From Argent.Examples Require Trie Queue KeyedMap Loops Halving.
+From Argent.Examples Require Lists Trie Queue KeyedMap Loops Halving.
 
+Print Assumptions Lists.T_append_exact.
+Print Assumptions Lists.T_append_le.
+Print Assumptions Lists.append_complexity.
+Print Assumptions Lists.T_slow_rev_le.
+Print Assumptions Lists.T_rev_onto_exact.
+Print Assumptions Lists.T_map_le.
+Print Assumptions Lists.T_add_to_all_le.
 Print Assumptions Trie.T_get_le.
 Print Assumptions Trie.T_set_le.
 Print Assumptions Trie.T_remove_le.
