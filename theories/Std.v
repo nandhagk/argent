@@ -15,7 +15,9 @@
     number ([Pos.size_nat], [N.size_nat], [Z.size_nat]).  Times and bounds have type [N], and a
     size has type [nat] and enters a bound as [N.of_nat] of the size.  So this file opens
     [N_scope] and marks the statements about sizes alone with [%nat].  The model has no native
-    numbers, so [nat] arithmetic is unary and binary arithmetic costs one step per bit.
+    numbers, so [nat] arithmetic is unary, and each recursive call of binary arithmetic handles
+    one bit: addition is linear in the number of bits, and multiplication and division are
+    quadratic.
 
     For example, [List.T_rev_le] says that reversing a list takes quadratic time:
     [List.T_rev l <= (N.of_nat (length l) + 1) * (N.of_nat (length l) + 1)].

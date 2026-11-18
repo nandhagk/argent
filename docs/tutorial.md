@@ -3,13 +3,30 @@
 By the end of this tutorial you can derive the time function of a Rocq function, prove bounds
 on it, and state its complexity, including amortised bounds and bounds for loops and
 well-founded recursion. You need to know basic Rocq: inductive types, `Fixpoint`, proofs by
-induction, and `lia`.
+induction, and `lia`. Steps 8 to 10 also use modules and functors, `sig` types, dependent
+`match` and accessibility proofs (`Acc`).
 
 Each step adds one idea, and its code comes from one of the files in [`examples/`](../examples),
 so you can read the full file next to the step. Steps 1 to 5 use
 [`examples/Lists.v`](../examples/Lists.v).
 
 ## 1. Your first time function
+
+A file that uses Argent starts like `examples/Lists.v`:
+
+```coq
+From Stdlib Require Import NArith Lia.
+From Stdlib Require List.
+From Argent Require Import Time Tactics Complexity Std.
+Import List.ListNotations ComplexityNotations.
+Local Open Scope list_scope.
+Local Open Scope N_scope.
+```
+
+`Time` has the command `TimeFun`, `Tactics` the tactics for proofs about time, `Complexity` the
+big-O notation of step 3, and `Std` the time functions of the standard library, such as that of
+addition on `nat`. Times are binary numbers of type `N`, so the file opens `N_scope`, and a sum
+of `nat`s is marked `%nat`.
 
 Here is `append`, written as usual:
 
@@ -39,7 +56,8 @@ fix T_append (A : Type) (l1 l2 : list A) {struct l1} : N :=
        end)%N
 ```
 
-`T_append` has the same shape as `append`, with costs in place of values:
+`T_append` has the same shape as `append`, with costs in place of values. `A` is implicit, as in
+`append`, so you write `T_append l1 l2`.
 
 - The `1 +` is the call of `append` itself. Every call of a function costs one step.
 - The `match` stays, because the cost depends on which branch runs.
@@ -47,9 +65,10 @@ fix T_append (A : Type) (l1 l2 : list A) {struct l1} : N :=
 - The recursive call `append r l2` costs `T_append r l2`. The `x ::` in front of it is a
   constructor, so it adds nothing.
 
-That is the whole cost model, in short: one step per call, and every call is charged with the
-time function of the function it calls. Types and proofs cost nothing, because extraction
-erases them. [The reference](reference.md#cost-model) lists every rule.
+That is the whole cost model, in short. A call is charged with the time function of the
+function that it calls, and every time function starts with `1 +` for its own call. Types and
+proofs cost nothing, because extraction erases them. [The reference](reference.md#cost-model)
+lists every rule.
 
 Times are binary numbers of type `N`, so a time function computes quickly even on large inputs.
 The example file checks one value:
@@ -60,8 +79,9 @@ Example T_append_three : T_append [1; 2; 3] [4; 5] = 4 := eq_refl.
 
 There are four calls: on `[1; 2; 3]`, `[2; 3]`, `[3]` and `[]`.
 
-To reason about `T_append`, it helps to write its two cases as equations. Both hold by
-computation, so `reflexivity` proves them:
+To reason about `T_append`, it helps to write its two cases as equations. `TimeFun` doesn't
+generate them: you state them yourself, and `reflexivity` proves them, because they hold by
+computation.
 
 ```coq
 Lemma T_append_nil {A : Type} (l2 : list A) : T_append [] l2 = 1.
@@ -86,7 +106,7 @@ Theorem T_append_exact {A : Type} (l1 l2 : list A) :
 Proof.
   induction l1 as [| x r IH].
   - rewrite T_append_nil. reflexivity.
-  - (* 1 + T_append r l2 = 1 + (length r + 1) *)
+  - (* T_append (x :: r) l2 is 1 + T_append r l2, and the IH gives T_append r l2. *)
     rewrite T_append_cons, IH. cbn [length]. lia.
 Qed.
 ```
@@ -99,7 +119,9 @@ Most bounds follow the same three moves: unfold the time function once, use the 
 hypothesis or a bound on a callee, then do the arithmetic. The tactic `time_step` makes those
 moves for a goal of the form `T_f args <= bound`. It unfolds `T_f` once, adds the bounds that it
 knows for the other time functions in the goal, and finishes with `lia` or `nia`, which use the
-hypotheses in context, such as the induction hypothesis:
+hypotheses in context, such as the induction hypothesis. It knows a bound on a time function
+`T_g` when a lemma named `T_g_le` sits next to `T_g`, or when one was registered with
+`TimeBound`. `Argent.Std` provides these lemmas for the standard library.
 
 ```coq
 Theorem T_append_le {A : Type} (l1 l2 : list A) :
@@ -128,8 +150,9 @@ Qed.
 Read it as "`T_append l1 l2` is in 𝑂 of the length of `l1`, over all pairs `(l1, l2)`". By
 definition, it means that one constant `c` works for every input:
 `T_append l1 l2 <= c * (N.of_nat (length l1) + 1)`. The `+ 1` lets an input of size 0 cost a
-constant. The proof gives the constant to `bigO_intro` and then proves the bound with that
-constant.
+constant. The proof gives the constant to `bigO_intro`, which leaves the goal
+`forall x, P x -> T x <= c * g x + c`. Here `x` is the pair `(l1, l2)`, and the precondition
+`P x` is `True`, which `intros [l1 l2] _` discards.
 
 A few details of the notation:
 
@@ -139,11 +162,10 @@ A few details of the notation:
   input.
 - The letter `𝑂` is U+1D442 (mathematical italic capital O), a different character from the
   constructor `O` of `nat`. Copy it from an example if your editor can't type it.
-- The notation lives in `ComplexityNotations`, so a file starts with
-  `From Argent Require Import Complexity.` and `Import ComplexityNotations.`
+- The notation lives in `ComplexityNotations`, which the file header of step 1 imports.
 
 The same notation writes lower bounds (Ω), tight bounds (Θ), bounds in the worst case and
-amortised bounds. Steps 6 and 7 use two of them, and
+amortised bounds. Step 6 uses the worst-case bound, and
 [the reference](reference.md#complexity-bounds) lists all of them.
 
 ## 4. Comparing two algorithms
@@ -159,7 +181,8 @@ Fixpoint slow_rev {A : Type} (l : list A) : list A :=
 ```
 
 Its time function charges the call of `append` with `T_append`, applied to the arguments that
-`append` receives:
+`append` receives. The example file states this case as a lemma, proved by `reflexivity` like
+`T_append_cons`:
 
 ```coq
 Lemma T_slow_rev_cons {A : Type} (x : A) (r : list A) :
@@ -170,11 +193,15 @@ The term `T_append (slow_rev r) [x]` grows with the length of `r`, so the total 
 The proof needs one fact about values as well as costs: reversing doesn't change the length.
 
 ```coq
+Lemma length_slow_rev {A : Type} (l : list A) : length (slow_rev l) = length l.
+```
+
+```coq
 Theorem T_slow_rev_le {A : Type} (l : list A) :
   T_slow_rev l <= (N.of_nat (length l) + 1) * (N.of_nat (length l) + 1).
 Proof.
   induction l as [| x r IH].
-  - (* Both sides compute to 1. *)
+  - (* Both sides compute to 1, and [reflexivity] also proves [1 <= 1]. *)
     reflexivity.
   - (* The append costs length r + 1, by T_append_exact. *)
     rewrite T_slow_rev_cons, T_append_exact, length_slow_rev. cbn [length]. lia.
@@ -193,7 +220,8 @@ Fixpoint rev_onto {A : Type} (l acc : list A) : list A :=
 
 So it takes linear time. This proof uses `time_unfold @T_rev_onto`, which unfolds `T_rev_onto`
 once, as rewriting with an equation like `T_append_cons` would, without stating the equation
-first:
+first. The `@` passes the constant `T_rev_onto` itself, without filling in its implicit
+argument:
 
 ```coq
 Theorem T_rev_onto_exact {A : Type} (l acc : list A) :
@@ -235,7 +263,7 @@ Theorem T_map_le {A B : Type} (f : A -> B) (T_f : A -> N) (k : N) (l : list A) :
   (forall x, T_f x <= k) -> T_map f T_f l <= (k + 1) * N.of_nat (length l) + 1.
 ```
 
-You never write a companion yourself. Where `map` is called, `TimeFun` derives it from the
+You never pass a companion in your code. Where `map` is called, `TimeFun` derives it from the
 argument. A closure `fun m => e` gets `fun m => 1 + (the cost of e)`, and a named function `g`
 gets its own time function `T_g`:
 
@@ -243,8 +271,12 @@ gets its own time function `T_g`:
 Definition add_to_all (n : nat) (l : list nat) : list nat := map (fun m => (n + m)%nat) l.
 ```
 
-```text
-T_add_to_all n l = 1 + T_map (fun m => n + m) (fun m => 1 + Nat.T_add n m) l
+The example file states what `TimeFun add_to_all` derived as a lemma, proved by
+`reflexivity`, so that proofs can rewrite with it:
+
+```coq
+Lemma T_add_to_all_eq (n : nat) (l : list nat) :
+  T_add_to_all n l = 1 + T_map (fun m => (n + m)%nat) (fun m => 1 + Nat.T_add n m) l.
 ```
 
 Addition on `nat` recurses on its first argument, so `Nat.T_add n m` is at most `n + 1`
@@ -300,22 +332,26 @@ Proof.
 Qed.
 ```
 
-A lookup that misses can stop at the first leaf, so no lower bound holds on every input. In
-the worst case there is one: on a trie that holds the key, `get` reads every bit (`T_get_ge` in
-the file). The worst-case bound Θ_worst says both things at once, the upper bound on every
-input and the lower bound on some input of every size:
+A lookup that misses can stop at the first leaf, so no lower bound in the bit length of the key
+holds on every input. In the worst case there is one: on a trie that holds the key, `get` reads
+every bit (`T_get_ge` in the file). The worst-case bound `Θ_worst` says both things at once, the
+upper bound on every input and the lower bound on some input of every size:
 
 ```coq
 Theorem get_worst_complexity {A : Type} (a : A) :
   T_get (A := A) p m ∈ Θ_worst(N.of_nat (Pos.size_nat p)) for (p, m).
 ```
 
-Its proof, by `tight_intro`, gives those slow inputs explicitly: the key `1~1~...~1` with `n`
-ones, in a trie that holds it.
+Its proof, by `tight_intro`, gives those slow inputs explicitly: the key `ones n`, which has `n`
+ones after its leading 1, in a trie that holds it. Building that trie needs a value to store,
+which is why the theorem takes an argument `a : A`.
 
-A side note on numbers: `positive`, `N` and `Z` are inductive types in the standard library, so
-in this model their arithmetic costs one step per bit, and `nat` arithmetic is unary. If you
-extract them to native integers, see `TimePrim` in [the reference](reference.md#timeprim).
+A side note on numbers: `positive`, `N` and `Z` are inductive types in the standard library,
+and in this model their arithmetic costs what its Gallina code costs. Each recursive call
+handles one bit, so addition takes time linear in the number of bits, and multiplication and
+division take quadratic time (see the bounds in `Argent.Std`). `nat` arithmetic is unary. If
+you extract numbers to native integers, see `TimePrim` in
+[the reference](reference.md#timeprim).
 
 ## 7. Amortised bounds
 
@@ -343,10 +379,12 @@ length of the back list:
 Definition back_length {A : Type} (q : queue A) : N := N.of_nat (length (snd q)).
 ```
 
-Then show that every operation costs at most a constant, 4, once you add the potential that it
+Then show that every operation costs at most a constant once you add the potential that it
 creates and subtract the potential that it uses up. A `push` costs 2 and raises the potential by
-1. A `pop` that reverses `b` costs `length b + 3` and lowers the potential by `length b`. The
-operations go behind one function, `step`, and the property is called `amortised`:
+1, which makes 3. A `pop` that reverses `b` costs `length b + 3` and lowers the potential by
+`length b`, which also makes 3. Any other `pop` costs 2. The example states the bound 4, which
+also holds, with some slack. The operations go behind one function, `step`, and the property is
+called `amortised`:
 
 ```coq
 Theorem step_amortised {A : Type} :
@@ -385,7 +423,9 @@ that constant.
 An implementation, such as `TrieMap`, runs `TimeFun get set`, which defines `T_get` and `T_set`
 with the names that the signature expects, and then proves the contracts for its own value of
 `c_map`. A client functor, such as `SumValues`, runs `TimeFun` on its own functions. A call of
-`M.get` is charged with `M.T_get`, so the client's bound can use only the contract:
+`M.get` is charged with `M.T_get`, so the client's bound can use only the contract. In
+`SumValues`, `sum_values ks m` adds the values that `m` holds at the keys `ks`, and
+`key_work ks` is the total bit length of the encoded keys, each plus one:
 
 ```coq
   Theorem T_sum_values_le (ks : list M.K.t) (m : M.t nat) :
@@ -417,9 +457,10 @@ Definition count_step (n : nat) : {m : nat | m < n} + nat :=
 Definition countdown (n : nat) : nat := loop lt count_step n (Acc_intro_generator 32 lt_wf n).
 ```
 
-`Acc_intro_generator 32` makes the accessibility proof compute, so that `countdown` runs under
-`vm_compute`. Extraction erases the proof, so the extracted `countdown` is a plain recursive
-function with no fuel.
+`Acc_intro_generator 32 lt_wf` puts `2 ^ 32` constructors in front of the proof `lt_wf`, built
+lazily, so `loop` can recurse under `vm_compute` without reducing the proof itself. That
+matters when a proof doesn't compute, as in step 10. Extraction erases the proof, so the
+extracted `loop` is a plain recursive function with no fuel, and `countdown` calls it.
 
 The time of a loop comes from a potential `Phi` on states, through `T_loop_le` (or
 `T_loop_fuel_le` for fuel). Suppose that every step that continues makes `Phi` drop by more
@@ -447,7 +488,8 @@ Qed.
 
 `T_countdown_unfold` states what `T_countdown` is: one step for the call, plus the time function
 of `loop`. `time_simpl` replaces a time function whose value is a number, here `T_count_step`,
-by that number.
+by that number. The tactic `loop_bound` applies `T_loop_le` or `T_loop_fuel_le` for you, and
+`T_count_le`, in the same file, uses it.
 
 ## 10. Well-founded recursion
 
@@ -478,9 +520,10 @@ of decrease needs. This pattern is called a convoy match.
 
 `TimeFun log2_step` gives the recursive-call argument `rec` its own companion `T_rec`. A call
 `rec y h` costs `T_rec y h`, and the proof `h` costs nothing. `Wf.T_Fix_le` in `Argent.Std`
-bounds the whole recursion with a potential, in the same way as the loop lemmas. If each step
-costs at most `Phi x`, assuming that each recursive call on `y` costs at most `Phi y + 1`, then
-`T_Fix … x <= Phi x + 1`. For `log2`, `Phi x = 4 * size x + 2`:
+bounds the whole recursion with a potential, in the same way as the loop lemmas. Suppose that
+each step, plus 1 for its own call, costs at most `Phi x` (the premise reads
+`T_F x rec T_rec + 1 <= Phi x`), assuming that each recursive call on `y` costs at most
+`Phi y + 1`. Then `T_Fix … x <= Phi x + 1`. For `log2`, `Phi x = 4 * size x + 2`:
 
 ```coq
 Theorem T_log2_le (x : N) : T_log2 x <= 4 * N.of_nat (N.size_nat x) + 4.
@@ -491,8 +534,7 @@ with `E_WF`. Write such functions with `Fix`, `loop` or `loop_fuel`.
 
 ## 11. Before you trust a bound
 
-A bound on `T_f` is a theorem about `T_f`. Four checks tie it to the program that you actually
-run.
+A bound on `T_f` is a theorem about `T_f`. Four checks tie it to the program that you run.
 
 - **What is counted.** `T_f` counts calls under call-by-value evaluation of the extracted
   program. The real number of machine steps is at least `T_f` and at most a constant times
@@ -501,8 +543,9 @@ run.
   this. It is not a theorem of the library.
 - **Run `TimeAudit` on the functions that you extract.** `TimeAudit f g …` visits every constant
   that they call, directly or not. It checks each time function again against its constant's
-  body, and fails on any computational constant that has no time function. A time function
-  can't be edited by hand without `TimeAudit` or `TimeCheck` noticing.
+  body, and fails on any computational constant that has neither a time function nor a
+  `TimePrim` cost. A time function can't be edited by hand without `TimeAudit` or `TimeCheck`
+  noticing.
 - **Review `TimePrim`.** `TimePrim c := (e)` declares the cost of a constant that has no body
   to read, such as one that extraction replaces by native code. It is the only way to write a
   cost by hand, so its uses are what to review.

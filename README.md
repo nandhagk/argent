@@ -3,14 +3,26 @@
 Argent works out how many steps your Rocq functions take, and helps you prove bounds on them.
 
 You write plain Gallina. The command `TimeFun f` reads the definition of `f` and defines a new
-function `T_f`: on the same arguments, `T_f` returns the number of steps that `f` takes, one
-step per function call. You then prove bounds on `T_f` by induction, as you would for any other
-function, and you can state them in big-O notation. Your code carries no cost annotations, and
-its extracted OCaml is unchanged.
+function `T_f`, which takes the same arguments as `f` (plus a time function for each function
+argument) and returns the number of steps that `f` takes, one step per function call. You then
+prove bounds on `T_f` by induction, as you would for any other function, and you can state them
+in big-O notation. Your code carries no cost annotations, and its extracted OCaml is unchanged.
 
 ## A first example
 
-This example comes from [`examples/Lists.v`](examples/Lists.v).
+This example comes from [`examples/Lists.v`](examples/Lists.v), which starts with these
+imports. Times are binary numbers of type `N`, so the file opens `N_scope`.
+
+```coq
+From Stdlib Require Import NArith Lia.
+From Stdlib Require List.
+From Argent Require Import Time Tactics Complexity Std.
+Import List.ListNotations ComplexityNotations.
+Local Open Scope list_scope.
+Local Open Scope N_scope.
+```
+
+Here is an ordinary function:
 
 ```coq
 Fixpoint append {A : Type} (l1 l2 : list A) : list A :=
@@ -35,9 +47,12 @@ fix T_append (A : Type) (l1 l2 : list A) {struct l1} : N :=
        end)%N
 ```
 
-It has the same shape as `append`. Every call costs 1, and the call on `x :: r` also pays for
-the recursive call on `r`. So `append l1 l2` takes one step per element of `l1`, plus one, and
-the proof is an induction:
+It has the same shape as `append`, and `A` is implicit as in `append`, so you write
+`T_append l1 l2`. Every call costs 1, and the call on `x :: r` also pays for the recursive call
+on `r`. So `append l1 l2` takes one step per element of `l1`, plus one. The example file states
+the two cases of `T_append` as lemmas, `T_append_nil : T_append [] l2 = 1` and
+`T_append_cons : T_append (x :: r) l2 = 1 + T_append r l2`, each proved by `reflexivity`. With
+them, the proof is an induction:
 
 ```coq
 Theorem T_append_exact {A : Type} (l1 l2 : list A) :
@@ -45,14 +60,23 @@ Theorem T_append_exact {A : Type} (l1 l2 : list A) :
 Proof.
   induction l1 as [| x r IH].
   - rewrite T_append_nil. reflexivity.
-  - (* 1 + T_append r l2 = 1 + (length r + 1) *)
+  - (* T_append (x :: r) l2 is 1 + T_append r l2, and the IH gives T_append r l2. *)
     rewrite T_append_cons, IH. cbn [length]. lia.
 Qed.
 ```
 
-`T_append_nil` and `T_append_cons` are the two cases of `T_append`, stated as equations and
-proved by `reflexivity`. The tactic `time_step` automates proofs like this one, so most bounds
-take one line. The same fact can also be stated in big-O notation:
+For a bound stated with `<=`, the tactic `time_step` does these steps itself, so most bounds
+take one line:
+
+```coq
+Theorem T_append_le {A : Type} (l1 l2 : list A) :
+  T_append l1 l2 <= N.of_nat (length l1) + 1.
+Proof.
+  induction l1 as [| x r IH]; time_step.
+Qed.
+```
+
+In big-O notation, a weaker form of the same result reads:
 
 ```coq
 Theorem append_complexity {A : Type} :
@@ -81,9 +105,9 @@ The theories live under the logical name `Argent`.
 
 | Theory | What you use it for |
 | --- | --- |
-| `Time` | The commands. `TimeFun` derives time functions; `TimeCheck`, `TimeAudit`, `TimePrim`, `TimePrimTable`, `TimeUnfold` and `TimeBound` check or adjust them. |
-| `Tactics` | Proving bounds: `time_step`, `time_unfold`, `time_cbn`, `time_pose`, `loop_bound` and `amortise`. |
-| `Std` | Time functions and bounds for the standard library's functions on lists, booleans, pairs, `nat`, `positive`, `N` and `Z`, and for `Fix`. |
+| `Time` | The commands. `TimeFun` derives time functions; `TimeCheck`, `TimeAudit`, `TimePrim`, `TimePrimTable`, `TimeUnfold` and `TimeBound` check or adjust them. Also the tactic `time_unfold`. |
+| `Tactics` | Proving bounds: `time_step`, `time_simpl`, `time_cbn`, `time_pose`, `time_lin`, `loop_bound` and `amortise`. |
+| `Std` | Time functions and bounds for the standard library's functions on lists, booleans, pairs, `nat`, `positive`, `N` and `Z`, and for `Fix` and the other well-founded recursors. |
 | `Complexity` | 𝑂, Ω, Θ, worst-case and amortised bounds, their lemmas, and the notation `T ∈ 𝑂(g) for x`. |
 | `Amortised` | The potential method for sequences of operations. |
 | `Loop` | Two loop combinators, `loop` and `loop_fuel`, whose bounds come from a potential. |

@@ -260,8 +260,8 @@ Some choices inside the library are worth recording:
 The cost model is call-by-value evaluation of the extracted program, which is OCaml evaluation
 without inlining. Types and proofs are erased. Constants applied only to irrelevant arguments
 are evaluated once. Constants that extraction realises natively cost what `TimePrim` declares.
-Everything else is Gallina code, so `positive` arithmetic costs one step per bit unless it is
-realised natively.
+Everything else is Gallina code, so `positive` arithmetic costs what its recursion costs, one
+step per bit for each pass over a number, unless it is realised natively.
 
 **Claim.** For a closed call `f v̄`, let `M` be the number of steps of a call-by-value machine,
 and `K` the size of the largest body reachable from `f`. Then `T_f v̄ <= M <= K * (T_f v̄ + 1)`.
@@ -346,8 +346,9 @@ directive. Argent ships no lint.
 - The guard checker accepts the derived time functions of the nested recursion that we tested:
   a tree whose constructor holds a `list` of subtrees, traversed either with `List.map` of the
   outer function or with a local `fix` over the list. Other nestings are untested.
-- Binary arithmetic on `positive`, `N` and `Z` costs one step per bit. A project that realises
-  it natively must declare its costs with `TimePrim`.
+- Binary arithmetic on `positive`, `N` and `Z` costs what its Gallina code costs: addition is
+  linear in the number of bits, and multiplication and division are quadratic. A project that
+  realises it natively must declare its costs with `TimePrim`.
 
 ## 7. Literature
 

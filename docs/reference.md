@@ -29,7 +29,7 @@ the body of a closure. Each kind of term costs the following.
 | A constructor `K a1 … an` | the costs of its arguments only | `x :: append r l2` costs `T_append r l2` |
 | A variable or a literal | 0 | |
 | A type or a proof | 0, because extraction erases it | the proof `div2_lt x q E` in `examples/Halving.v` |
-| A constant applied only to types and proofs, such as `@nil A` | 0, because the extracted program evaluates it once, at start-up | |
+| A defined constant applied only to types and proofs, such as `@empty A` in `examples/Queue.v` | 0, because the extracted program evaluates it once, at start-up | |
 
 A function argument `g` of `f` gets a *companion* `T_g`, its time function, right after it in
 `T_f`. So `T_map` has the type
@@ -52,9 +52,11 @@ What the model counts, and how exactly:
   between two counted calls is bounded by the size of the largest body. The real number of
   steps is between `T_f` and a constant times `T_f + 1`. [The design note](design.md)
   argues this. It is not a theorem of the library.
-- **Numbers are the standard library's inductive types.** `nat` arithmetic is unary, and
-  arithmetic on `positive`, `N` and `Z` costs one step per bit. A constant that extraction
-  realises natively must declare its cost with [`TimePrim`](#timeprim).
+- **Numbers are the standard library's inductive types.** `nat` arithmetic is unary.
+  Arithmetic on `positive`, `N` and `Z` costs what its Gallina code costs: each recursive call
+  handles one bit, so addition takes time linear in the number of bits, and multiplication and
+  division take quadratic time. A constant that extraction realises natively must declare its
+  cost with [`TimePrim`](#timeprim).
 - **Times are binary numbers of type `N`.** So `vm_compute` evaluates a time function quickly
   even on large inputs. `tests/TestsLarge.v` evaluates the time of `rev_append` on 1,000,000
   elements. Evaluating `T_f` can take longer than running `f`, because it also recomputes the
@@ -193,12 +195,14 @@ declares nothing. It is meant for tests.
 
 ## Tactics
 
-The tactics are in `Argent.Tactics`.
+`time_unfold` is defined in `Argent.Time`, and the other tactics in `Argent.Tactics`.
 
 ### `time_unfold`
 
 `time_unfold @T_f` unfolds `T_f` by one step wherever its structural argument is a
-constructor, and folds its recursive calls back.
+constructor, and folds its recursive calls back. A time function that isn't recursive is
+unfolded at every application. The `@` passes the constant itself, without filling in its
+implicit arguments.
 
 ```coq
 time_unfold @T_rev_onto.
@@ -374,9 +378,13 @@ Module Type MAP.
   Parameter get_set_same : forall A k (v : A) m, get k (set k v m) = Some v.
   (* The time layer. *)
   Parameter T_get : forall {A : Type}, K.t -> t A -> N.
+  Parameter T_set : forall {A : Type}, K.t -> A -> t A -> N.
   Parameter c_map : N.
   Parameter T_get_le :
     forall A k (m : t A), (T_get k m <= c_map * (N.of_nat (Pos.size_nat (K.encode k)) + 1))%N.
+  Parameter T_set_le :
+    forall A k (v : A) m,
+      (T_set k v m <= c_map * (N.of_nat (Pos.size_nat (K.encode k)) + 1))%N.
 End MAP.
 ```
 
@@ -423,15 +431,17 @@ costs `1 + T_Fix_F … y _`, where the 1 is the call of the closure that `Fix_F`
 `Wf.T_well_founded_induction_type_le` say the same for the other recursors.
 `examples/Halving.v` uses `Wf.T_Fix_le`.
 
-A `Fix` over a well-foundedness proof that ends in `Qed`, such as `N.lt_wf_0`, doesn't compute
-under `vm_compute`, because the accessibility proof never reduces to a constructor. Wrapping the
-proof in `Acc_intro_generator n`, which lazily adds `2 ^ n` constructors in front of it, makes
-the function compute. Extraction erases the proof, so the extracted `log2` of
-`examples/Halving.v` is `let rec log2 x = log2_step x (fun y _ -> log2 y)`.
+A `Fix` over a well-foundedness proof that never reduces to a constructor gets stuck under
+`vm_compute`. `N.lt_wf_0` is such a proof, because it is built from a lemma that ends in `Qed`.
+Wrapping the proof in `Acc_intro_generator n`, which lazily adds `2 ^ n` constructors in front
+of it, makes the function compute when its recursion is less than `2 ^ n` calls deep.
+Extraction erases the proof, so the extracted `log2` of `examples/Halving.v` is
+`let rec log2 x = log2_step x (fun y _ -> log2 y)`.
 
 ## Error codes
 
-`TimeFun` rejects a definition whose cost it can't account for. Each rejection has a code.
+`TimeFun` rejects a definition whose cost it can't account for, and `TimeAudit` rejects a root
+that reaches a constant without a cost. Each rejection has a code.
 
 | Code | Cause | What to do |
 | --- | --- | --- |
@@ -443,12 +453,13 @@ the function compute. Extraction erases the proof, so the extracted `log2` of
 | `E_WF` | The definition recurses through a recursor without a time function, such as the `Fix_sub` of `Program Fixpoint` or the termination term of `Function`, or its result type is a function. | Use `Fix`, `loop` or `loop_fuel`. |
 | `E_OPAQUE` | The constant, or a callee, is opaque or has no body. | End it with `Defined` in place of `Qed`, or declare its cost with `TimePrim`. |
 | `E_SECTION` | The definition uses a section variable. | Run `TimeFun` after the section closes, or make the variable a functor parameter. |
-| `E_TERM` | The term has a form that the translation doesn't support, such as `cofix`. | Rewrite the definition without it. |
+| `E_TERM` | The term has a form that the translation doesn't support, such as a `let` in a function argument: `map (let g := S in g) l`. | Move the `let` out of the call: `let g := S in map g l` is accepted. A definition with `cofix` fails before translation, with no code. |
 | `E_ILLTYPED` | The derived time function doesn't typecheck, for example when a function argument returns a function where a polymorphic callee expects data. | Don't instantiate the data type of a polymorphic callee with a function type, as `map Nat.add l` does. |
 | `E_CHECK` | The time function next to a callee is not the one derived from the callee's body. | Delete the hand-written `T_g`, and run `TimeFun g`. |
 | `E_NOT_CODE` | The command targets a type or a proof. | Run it on a function. |
 | `E_PLACE` | The command runs in the wrong module for a constant of another library. | Run it in a module named like the last component of the constant's path. |
 | `E_TIMED` | The command repeats an earlier derivation. | Remove the second `TimeFun`. |
+| `E_AUDIT` | `TimeAudit` reached a computational constant that has neither a time function nor a `TimePrim` cost. | Run `TimeFun` on that constant, or declare its cost with `TimePrim`. |
 
 ## Limits
 
