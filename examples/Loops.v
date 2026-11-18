@@ -30,10 +30,10 @@ Definition count_step (n : nat) : {m : nat | m < n} + nat :=
 
 TimeFun count_step.
 
-(** [lt_wf] proves that [lt] is well founded, but its proof ends in [Qed], so it never
-    reduces to a constructor and [loop] can't compute with it.  [Acc_intro_generator 32 lt_wf]
-    puts [2 ^ 32] constructors in front of it, built lazily, so any countdown that ends in
-    fewer than [2 ^ 32] steps runs under [vm_compute]. *)
+(** [Acc_intro_generator 32 lt_wf] puts [2 ^ 32] constructors in front of the proof [lt_wf],
+    built lazily.  [loop] recurses on those constructors, so a countdown of fewer than
+    [2 ^ 32] steps runs under [vm_compute] without reducing [lt_wf] itself.  That matters
+    when a well-foundedness proof doesn't compute, as in Halving.v. *)
 Definition countdown (n : nat) : nat := loop lt count_step n (Acc_intro_generator 32 lt_wf n).
 
 TimeFun countdown.
@@ -82,8 +82,9 @@ Definition count_step_fuel (s : nat * list nat) : (nat * list nat) + nat :=
 
 TimeFun count_step_fuel.
 
-(** Each step removes one element, so the fuel [length l + 1] is enough.  The bound below
-    holds for any fuel, though, because a loop that runs out of fuel only stops earlier. *)
+(** Each step removes one element, so the fuel [length l + 1] is enough.  [T_loop_fuel_le]
+    bounds a fuel loop for any amount of fuel, because a loop that runs out of fuel only stops
+    earlier, so the bound below doesn't depend on this choice. *)
 Definition count (l : list nat) : (nat * list nat) + nat :=
   loop_fuel count_step_fuel (length l + 1) (0, l).
 
@@ -107,12 +108,13 @@ Proof.
   (* Computing the fuel costs at most [length l + 1] for [length], and as much for [+ 1]. *)
   pose proof (Datatypes.T_length_le l) as Hlength.
   pose proof (Nat.T_add_le (length l) 1) as Hadd.
-  (* [T_loop_fuel_le] bounds the loop by [Phi (0, l) + Tstop + 1], with
-     [Phi s = 2 * length (snd s)] and [Tstop = 1]. *)
   enough (Hloop : (T_loop_fuel count_step_fuel T_count_step_fuel (length l + 1) (0%nat, l)
                    <= 2 * N.of_nat (length l) + 1 + 1)%N) by lia.
-  apply (T_loop_fuel_le count_step_fuel T_count_step_fuel (fun _ => True)
-    (fun s => 2 * N.of_nat (length (snd s)))%N 1%N).
+  (* The tactic [loop_bound] applies [T_loop_fuel_le] with the invariant [True], the
+     potential [Phi s = 2 * length (snd s)] and [Tstop = 1].  It leaves the premises of the
+     lemma and the arithmetic [Phi (0, l) + 1 + 1 <= 2 * length l + 1 + 1]. *)
+  loop_bound (fun _ : nat * list nat => True)
+    (fun s : nat * list nat => (2 * N.of_nat (length (snd s)))%N) 1%N.
   - (* A step that continues removes one element: it costs 1, and the potential drops by 2. *)
     intros [c [| x r]] s1 _ Hstep; cbn in Hstep; [discriminate |].
     injection Hstep as <-. split; [exact I |]. time_simpl. time_cbn. lia.
@@ -120,4 +122,6 @@ Proof.
     intros s r _ _. time_simpl. lia.
   - (* The invariant is [True]. *)
     exact I.
+  - (* The arithmetic, once [Phi (0, l)] is computed. *)
+    time_cbn. lia.
 Qed.

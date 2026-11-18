@@ -86,8 +86,9 @@ Proof.
   rewrite rev_append_rev, app_nil_r. apply length_rev.
 Qed.
 
-(** Every operation costs at most 4, minus the drop in the potential: the actual time plus
-    the new potential is at most 4 plus the old potential. *)
+(** Every operation costs at most 4 plus the drop in the potential: the actual time plus the
+    new potential is at most 4 plus the old potential.  Each case below needs at most 3, so
+    the bound 4 leaves some slack. *)
 Theorem step_amortised {A : Type} :
   amortised (@step A) T_step (fun _ _ => 4%N) back_length (fun _ => True).
 Proof.

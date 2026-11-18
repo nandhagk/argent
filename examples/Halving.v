@@ -45,9 +45,10 @@ Definition log2_step (x : N) (rec : forall y : N, (y < x)%N -> nat) : nat :=
     recursive call [rec y h] costs [T_rec y h].  Proofs cost nothing. *)
 TimeFun log2_step.
 
-(** [N.lt_wf_0] ends in [Qed], so it never reduces to a constructor.
+(** [N.lt_wf_0] is built from a lemma that ends in [Qed], so it never reduces to a
+    constructor, and a [Fix] over it gets stuck under [vm_compute].
     [Acc_intro_generator 64] puts [2 ^ 64] constructors in front of it, built lazily, so
-    that [log2] runs under [vm_compute]. *)
+    that [log2] runs. *)
 Definition log2 (x : N) : nat :=
   Fix (Acc_intro_generator 64 N.lt_wf_0) (fun _ => nat) log2_step x.
 

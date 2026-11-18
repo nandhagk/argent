@@ -65,14 +65,17 @@ Theorem T_append_exact {A : Type} (l1 l2 : list A) :
 Proof.
   induction l1 as [| x r IH].
   - rewrite T_append_nil. reflexivity.
-  - (* 1 + T_append r l2 = 1 + (length r + 1) *)
+  - (* T_append (x :: r) l2 is 1 + T_append r l2, and the IH gives T_append r l2. *)
     rewrite T_append_cons, IH. cbn [length]. lia.
 Qed.
 
 (** [time_step] does those steps for a goal [T_f args <= bound]: it unfolds [T_f] once, adds
     the bounds that it knows for the other time functions in the goal, and solves the
-    arithmetic with the hypotheses in context, such as the induction hypothesis.  Most bounds
-    take one line. *)
+    arithmetic with the hypotheses in context, such as the induction hypothesis.  It knows a
+    bound on [T_g] when a lemma named [T_g_le] sits next to [T_g], or when one was registered
+    with [TimeBound].  Most bounds take one line. *)
+
+(** [append l1 l2] takes at most one step per element of [l1], plus one. *)
 Theorem T_append_le {A : Type} (l1 l2 : list A) :
   T_append l1 l2 <= N.of_nat (length l1) + 1.
 Proof.
@@ -132,7 +135,7 @@ Theorem T_slow_rev_le {A : Type} (l : list A) :
   T_slow_rev l <= (N.of_nat (length l) + 1) * (N.of_nat (length l) + 1).
 Proof.
   induction l as [| x r IH].
-  - (* Both sides compute to 1. *)
+  - (* Both sides compute to 1, and [reflexivity] also proves [1 <= 1]. *)
     reflexivity.
   - (* The append costs length r + 1, by T_append_exact. *)
     rewrite T_slow_rev_cons, T_append_exact, length_slow_rev. cbn [length]. lia.
@@ -151,7 +154,8 @@ TimeFun rev_onto.
 
 (** [rev_onto] takes one step per element of [l], plus one.  [time_unfold @T_rev_onto]
     unfolds [T_rev_onto] once, as rewriting with an equation such as [T_append_cons] would,
-    without stating the equation first. *)
+    without stating the equation first.  The [@] passes the constant [T_rev_onto] itself,
+    without filling in its implicit argument. *)
 Theorem T_rev_onto_exact {A : Type} (l acc : list A) :
   T_rev_onto l acc = N.of_nat (length l) + 1.
 Proof.
