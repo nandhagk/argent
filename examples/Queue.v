@@ -1,12 +1,13 @@
 (** * A queue with an amortised bound
 
-    A functional queue keeps two lists: [push] adds to the back list, and [pop] takes from the
-    front list.  When the front list is empty, [pop] first reverses the back list into the
-    front, so one [pop] can take time linear in the size of the queue.  Each element is
-    reversed at most once, though, so a whole sequence of operations costs a constant per
-    operation.  This file proves that bound with a potential, the length of the back list:
-    each [push] raises the potential by one, and so pays in advance for moving its element
-    during a later reversal.
+    The queue is a pair of lists: [push] adds to the back list, and [pop] takes from the front
+    list.
+    - When the front list is empty, [pop] first reverses the back list into the front.  One
+      [pop] can take time linear in the size of the queue.
+    - Each element is reversed at most once.  A sequence of operations from the empty queue
+      costs at most 4 per operation ([queue_total]).
+    - The proof uses a potential, the length of the back list.  Each [push] raises it by one,
+      and that pays in advance for moving the element in a later reversal ([step_amortised]).
 
     For example, pushing 1, 2 and 3 and then popping costs 2 + 2 + 2 + 6 = 12 steps: the
     [pop] reverses three elements.  The bound for four operations is [4 * 4 = 16].

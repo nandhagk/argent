@@ -1,11 +1,12 @@
 (** * Binary tries over positive keys
 
-    A binary trie stores values under keys of type [positive].  [get], [set] and [remove] read
-    the key one bit at a time, starting from the lowest bit: a 0 ([xO q]) goes to the left
-    child, a 1 ([xI q]) goes to the right child, and the leading 1 ([xH]) stops at the current
-    node.  So each operation visits at most one node per bit of the key.  This file proves
-    those bounds, states them in big-O notation, and shows that [get] can't do better in the
-    worst case.
+    A binary trie maps keys of type [positive] to values.
+    - [get], [set] and [remove] read the key one bit at a time, from the lowest bit: [xO q]
+      goes left, [xI q] goes right, [xH] stops.
+    - Each operation takes time linear in the bit length of the key ([T_get_le], [T_set_le],
+      [T_remove_le]).
+    - On a trie that holds the key, [get] reads every bit ([T_get_ge]).  So in the worst case
+      [get] takes time Θ of the bit length ([get_worst_complexity]).
 
     For example, [get 6 m] reads [6 = 1~1~0] from the right: left, right, stop.  It visits at
     most three nodes, so [T_get 6 m <= 3].

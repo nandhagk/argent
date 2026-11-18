@@ -1,14 +1,13 @@
 (** * Tactics for time bounds
 
-    This file gives the tactics that prove bounds [T_f args <= bound] on time functions.  The
-    main one is [time_step].  It unfolds the time function on the left by one step, computes
-    the sizes in the goal, adds the bounds that it knows for the time functions left in the
-    goal, and tries to finish with arithmetic.  A bound on a structurally recursive function
-    usually needs only an induction and [time_step].
-
-    The steps of [time_step] are tactics of their own, for proofs by hand: [time_unfold] (in
-    Time), [time_simpl], [time_cbn], [time_pose] and [time_lin].  [loop_bound] and [amortise]
-    apply the potential lemmas of Loop and Amortised.
+    Tactics for goals [T_f args <= bound].
+    - [time_step] unfolds the time function on the left by one step, computes the sizes in
+      the goal, adds the known bounds of the time functions left in the goal, and tries to
+      finish with arithmetic.  A bound on a structurally recursive function usually needs only
+      an induction and [time_step].
+    - The steps of [time_step] are tactics of their own, for proofs by hand: [time_unfold] (in
+      Time), [time_simpl], [time_cbn], [time_pose] and [time_lin].
+    - [loop_bound] and [amortise] apply the potential lemmas of Loop and Amortised.
 
     For example, Std proves [T_length l <= N.of_nat (length l) + 1] by induction on [l] and
     [time_step].  In the case [x :: l], [time_step] turns [T_length (x :: l)] into
@@ -23,7 +22,7 @@ From Argent Require Import Time Loop Amortised.
 
 (** Hints for the premises of conditional bounds.  When [time_pose] adds a bound
     [P x -> T_g x <= B], it tries to prove [P x] with [assumption], [lia] or
-    [eauto with time_inv], so add the lemmas about your invariants here.  A premise that none of
+    [eauto with time_inv].  Add lemmas about invariants to [time_inv].  A premise that none of
     them proves stays in the hypothesis. *)
 Create HintDb time_inv.
 

@@ -1,13 +1,15 @@
 (** * Tests of the complexity notation
 
-    This file checks the notation of [ComplexityNotations] against the terms that it stands
-    for.  Most examples state that a bound written in the notation equals the bound written
-    with [bigO], [bigOmega], [bigTheta], [bigOmega_worst], [tight] or [bigO_amortised], and
-    [same_term] proves it with [constr_eq], so a bound that parsed with another grouping or in
-    another scope fails.  The groups check the twelve forms, the precedence of the notation, its
-    scopes, its binders, the syntax around it that must still parse, and the example in the
-    header of [Complexity].  Outside [LengthTests] the file opens no scope, so the scope tests
-    read their statements in [nat_scope].
+    The notation of [ComplexityNotations], checked against the terms that it stands for.
+    - Most examples state that a bound written in the notation equals the bound written with
+      [bigO], [bigOmega], [bigTheta], [bigOmega_worst], [tight] or [bigO_amortised].
+    - [same_term] proves each with [constr_eq], so a bound that parsed with another grouping or
+      in another scope fails.
+    - The groups check the twelve forms, the precedence of the notation, its scopes, its
+      binders, the syntax around it that must still parse, and the example in the header of
+      [Complexity].
+    - Outside [LengthTests] no scope is opened, so the scope tests read their statements in
+      [nat_scope].
 
     For example, [precondition_takes_conjunction] checks that the precondition of
     [cost a b ∈ 𝑂(a) for (a, b) | below a b /\ a <> 0%N] is the whole conjunction.

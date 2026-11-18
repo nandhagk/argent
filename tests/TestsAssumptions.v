@@ -1,8 +1,8 @@
 (** * Assumptions of the example theorems
 
-    This file prints the assumptions of every theorem of the examples, of the library's
-    potential lemmas and of the lemmas of [Complexity].  Each one must print "Closed under the
-    global context".  The build log records the output, and the report quotes it.
+    - [Print Assumptions] on every theorem of the examples, on the potential lemmas of the
+      library and on the lemmas of [Complexity].
+    - Each one must print "Closed under the global context".
 
     For example, [Print Assumptions Trie.get_worst_complexity] shows that the worst-case
     tightness of [get] uses no axiom.

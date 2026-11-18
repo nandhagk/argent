@@ -1,8 +1,9 @@
 (** * Rejection tests
 
-    This file checks that [TimeFun] rejects every definition whose cost it cannot account for,
-    each with its own error code.  Every case has a [Fail TimeFun] and a [TimeFunFails] that
-    names the expected code.
+    Rejections by [TimeFun], each checked with its error code.
+    - Each case has a [Fail TimeFun] and a [TimeFunFails] that names the expected code.
+    - A definition with [cofix] fails before translation, with no code, so its case has a
+      [Fail TimeFun] only.
 
     For example, [Some (fun x => x)] stores a closure in data and is rejected with
     [E_CLOSURE_DATA].

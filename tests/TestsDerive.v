@@ -1,10 +1,12 @@
 (** * Derivation tests
 
-    This file tests the features of [TimeFun] beyond plain structural recursion: mutual and
-    local fixpoints, lets of functions, beta-redexes, partial application and eta-expansion,
-    [TimeUnfold] on an identity monad, nested inductive types, universe polymorphism, implicit
-    arguments, closed constants, [TimePrim], [TimeCheck] and [TimeAudit].  Each [Example] is
-    checked by [vm_compute] or by conversion.
+    Features of [TimeFun] beyond plain structural recursion:
+    - mutual and local fixpoints, lets of functions, beta-redexes, partial application and
+      eta-expansion;
+    - [TimeUnfold] on an identity monad, nested inductive types, universe polymorphism,
+      implicit arguments and closed constants;
+    - [TimePrim], [TimeCheck] and [TimeAudit].
+    Each [Example] is checked by [vm_compute] or by conversion.
 
     For example, [redex_once] checks that the argument of [(fun x => x + x) (expensive n)] is
     charged once.
@@ -271,7 +273,7 @@ Fail TimeAudit use_wrap.
 (** * The table of built-in costs
 
     [TimePrimTable] prints the costs declared with [TimePrim] and fails unless the constants with
-    a declared cost are exactly the given ones, here the two of this file. *)
+    a declared cost are exactly the given ones, here [opaque_double] and [opaque_triple]. *)
 Definition opaque_triple (n : nat) : nat.
 Proof.
   exact (n + n + n).

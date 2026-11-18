@@ -1,22 +1,22 @@
 (** * Amortised bounds
 
-    Some operations are expensive now and then, but cheap on average over any sequence of them.
-    This file proves the potential method of Tarjan, which bounds a whole sequence.  An
-    operation [o] maps a state [s] to [op o s] and costs [T o s].  Choose a potential [Phi] on
-    states and an amortised cost [A].  When every operation satisfies
+    The potential method of Tarjan, for operations that are expensive now and then but cheap
+    on average over any sequence of them.
+    - An operation [o] maps a state [s] to [op o s] and costs [T o s].
+    - Choose a potential [Phi] on states and an amortised cost [A], and show that every
+      operation satisfies
 
-      T o s + Phi (op o s) <= A o s + Phi s,
+        T o s + Phi (op o s) <= A o s + Phi s
 
-    a sequence of operations costs at most the sum of its amortised costs, plus the potential
-    of the first state.
+    - Then a sequence of operations costs at most the sum of its amortised costs, plus the
+      potential of the first state ([amortised_run], [amortised_uniform]).
+    - The bounds hold along one sequence of states, each used once.  They say nothing about a
+      history that uses one state several times, because repeating an expensive operation on
+      the same state is not paid for.
 
     For example, a queue made of two lists, with [Phi] the length of the back list, has an
-    amortised cost of a constant per operation, so [n] operations from the empty queue cost at
-    most a constant times [n].
-
-    The bounds hold along one sequence of states, each used once.  They say nothing about a
-    history that uses one state several times, because repeating an expensive operation on the
-    same state is not paid for.
+    amortised cost of a constant per operation.  So [n] operations from the empty queue cost
+    at most a constant times [n].
 
     Builds on: Stdlib Lia NArith *)
 

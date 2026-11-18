@@ -1,23 +1,22 @@
 (** * Time functions of the standard library
 
-    Code that calls the standard library needs the time functions of the functions it calls.
-    This file derives them, with [TimeFun], for the common functions on booleans, pairs, lists,
-    [nat], [positive], [N] and [Z], and for the well-founded recursors [Fix_F], [Fix],
-    [Acc_rect] and [well_founded_induction_type].  It also proves bounds for the common ones,
-    and a potential lemma for each recursor.
-
-    A time function lives in a module with the same last name as the module of its constant,
-    because that is where [TimeFun] looks for it: [Datatypes.T_length], [List.T_rev],
-    [Nat.T_add], [Pos.T_add], [N.T_add], [Z.T_add], [Wf.T_Fix].  A bound on [T_g] is named
-    [T_g_le] and sits beside [T_g], so [time_pose] and [time_step] use it without registration.
-
-    The bounds are in the size of the arguments: the length of a list, or the bit length of a
-    number ([Pos.size_nat], [N.size_nat], [Z.size_nat]).  Times and bounds have type [N], and a
-    size has type [nat] and enters a bound as [N.of_nat] of the size.  So this file opens
-    [N_scope] and marks the statements about sizes alone with [%nat].  The model has no native
-    numbers, so [nat] arithmetic is unary, and each recursive call of binary arithmetic handles
-    one bit: addition is linear in the number of bits, and multiplication and division are
-    quadratic.
+    Code that calls the standard library needs the time functions of its callees.
+    - [TimeFun] derives them for the common functions on booleans, pairs, lists, [nat],
+      [positive], [N] and [Z], and for the well-founded recursors [Fix_F], [Fix], [Acc_rect]
+      and [well_founded_induction_type].
+    - Bounds for the common functions, and a potential lemma for each recursor.
+    - A time function lives in a module with the same last name as the module of its constant,
+      because [TimeFun] looks for it there: [Datatypes.T_length], [List.T_rev], [Nat.T_add],
+      [Pos.T_add], [N.T_add], [Z.T_add], [Wf.T_Fix].
+    - A bound on [T_g] is named [T_g_le] and sits next to [T_g], so [time_pose] and
+      [time_step] use it without registration.
+    - Bounds are in the size of the arguments: the length of a list, or the bit length of a
+      number ([Pos.size_nat], [N.size_nat], [Z.size_nat]).
+    - Times and bounds have type [N].  A size has type [nat] and enters a bound as [N.of_nat]
+      of the size.  [N_scope] is open, and statements about sizes alone are marked [%nat].
+    - No native numbers: [nat] arithmetic is unary, and each recursive call of binary
+      arithmetic handles one bit.  Addition is linear in the number of bits; multiplication
+      and division are quadratic.
 
     For example, [List.T_rev_le] says that reversing a list takes quadratic time:
     [List.T_rev l <= (N.of_nat (length l) + 1) * (N.of_nat (length l) + 1)].

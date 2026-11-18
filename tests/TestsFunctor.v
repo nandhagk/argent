@@ -1,10 +1,12 @@
 (** * Functor tests
 
-    This file checks that [TimeFun] works inside functors.  A call of a parameter's operation
-    [L.join] uses the parameter's time function [L.T_join], found by the sibling rule, and a
-    functor instance carries the derived time functions of its body.  A bound proved inside the
-    functor uses only the contracts of the signature.  A time function found beside a callee
-    with a body is derived again before it is used, also through [Include] and in an instance.
+    [TimeFun] inside functors.
+    - A call of a parameter's operation [L.join] uses the parameter's time function [L.T_join],
+      found by the sibling rule.
+    - A functor instance carries the derived time functions of its body.
+    - A bound proved inside the functor uses only the contracts of the signature.
+    - A time function found next to a callee with a body is derived again before it is used,
+      also through [Include] and in an instance.
 
     For example, after [Module I := JoinAll BoolLattice], [I.T_join_all] calls
     [BoolLattice.T_join].

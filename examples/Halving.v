@@ -1,14 +1,14 @@
 (** * Well-founded recursion by halving
 
-    [log2] and [halves] recurse on half of their argument, which is not a structural
-    subterm, so they are written with [Fix] over [N.lt].  [TimeFun] derives their time
-    functions like any others, and [Wf.T_Fix_le] bounds them with a potential [Phi]: when each
-    step, given recursive calls that cost at most [Phi y + 1], costs at most [Phi x] including
-    its own call, the whole recursion from [x] costs at most [Phi x + 1].
-
-    [log2] makes one recursive call on half of its argument, so its time is linear in the bit
-    length of the argument.  [halves] makes two, so its time is linear in the value of the
-    argument.
+    [log2] and [halves] recurse on half of their argument.  Half of a number is not a
+    structural subterm, so both use [Fix] over [N.lt].
+    - [TimeFun] derives their time functions like any others.
+    - [Wf.T_Fix_le] bounds a [Fix] with a potential [Phi].  If each step, plus 1 for its own
+      call, costs at most [Phi x] when every recursive call on [y] costs at most [Phi y + 1],
+      the whole recursion from [x] costs at most [Phi x + 1].
+    - [log2] makes one recursive call, so its time is linear in the bit length of its
+      argument ([T_log2_le]).
+    - [halves] makes two, so its time is linear in the value of its argument ([T_halves_le]).
 
     For example, [log2 1000] is 9, and its time is at most
     [4 * N.of_nat (N.size_nat 1000) + 4 = 44].

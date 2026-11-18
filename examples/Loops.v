@@ -1,13 +1,13 @@
 (** * Loops bounded by a potential
 
-    A loop that doesn't recurse on a smaller piece of its input needs another argument for
-    termination.  Loop.v offers two.  [loop] recurses on a proof that the state decreases (an
-    accessibility proof): it needs no fuel, and it extracts to a plain recursive function.
-    [loop_fuel] takes a [nat] bound on the number of iterations, called fuel.  Either way, the
-    time comes from a potential [Phi] on the states: when every step that continues makes
-    [Phi] drop by more than the step costs, the loop costs at most [Phi] of the first state,
-    plus the cost of the last step, plus one.  The bound depends neither on the proof nor on
-    the fuel.
+    Loop provides two loops for recursion that isn't structural.
+    - [loop] recurses on a proof that the state decreases, an accessibility proof.  It needs
+      no fuel, and extraction erases the proof.
+    - [loop_fuel] takes a [nat] bound on the number of iterations, called fuel.
+    - Their time comes from a potential [Phi] on the states ([T_loop_le], [T_loop_fuel_le]).
+      If every step that continues makes [Phi] drop by more than the step costs, the loop
+      costs at most [Phi] of the first state, plus the cost of the last step, plus one.
+    - The bound holds for every accessibility proof and every amount of fuel.
 
     For example, [countdown 3] steps from 3 to 2, 1 and 0, and stops there.  With the
     potential [2 * n], its time is at most [2 * 3 + 3].

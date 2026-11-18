@@ -1,18 +1,18 @@
 (** * Loops
 
-    A loop whose state does not get structurally smaller is not a [Fixpoint] that Rocq accepts.
-    This file gives two ways to write such a loop, and a lemma that bounds the time of each.
+    A loop whose state doesn't get structurally smaller is not a [Fixpoint] that Rocq accepts.
+    Two ways to write one, each with a lemma that bounds its time:
     - [loop] takes a step function that returns either a smaller state, with a proof that it is
-      smaller, or a result.  It recurses on an accessibility proof, which extraction erases, so
-      the extracted code is a plain recursive function without fuel.
+      smaller, or a result.  It recurses on an accessibility proof.  Extraction erases the
+      proof, so the extracted code is a plain recursive function without fuel.
     - [loop_fuel] runs the step function at most [fuel] times, with fuel computed from the data.
-    Both bounds come from a potential [Phi]: each step must pay its own cost and the cost of its
-    call from a strict decrease of [Phi].  So the bounds hold for every accessibility proof and
-    every amount of fuel.
+    - Both bounds come from a potential [Phi]: each step pays its own cost and the cost of its
+      call from a strict decrease of [Phi].  The bounds hold for every accessibility proof and
+      every amount of fuel.
 
     For example, a countdown whose step goes from [n + 1] to [n] and costs 1 meets the premises
-    of [T_loop_le] with the potential [fun n => 2 * n] and a last step of cost 1.  So the
-    countdown from [n] costs at most [2 * n + 2].
+    of [T_loop_le] with the potential [fun n => 2 * n] and a last step of cost 1.  So the loop
+    from [n] costs at most [2 * n + 2].
 
     Builds on: Time *)
 

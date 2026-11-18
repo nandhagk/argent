@@ -1,17 +1,17 @@
 (** * Maps over abstract keys
 
-    Code that is generic over a module gets its bounds from the module's signature.  So a
-    signature here has two layers.  The functional layer declares the operations and their
-    laws, as usual.  The time layer declares, for each operation, its time function, a named
-    constant, and a contract that bounds the time function using that constant.  Every
-    implementation proves the contracts for its own constant.  A client functor can only use
-    the contracts, so its bounds hold for every implementation.
+    Code that is generic over a module gets its bounds from the module's signature.
+    - A signature has a functional layer, the operations and their laws, and a time layer.
+    - The time layer declares, for each operation, its time function, a named constant and a
+      contract that bounds the time function with that constant.
+    - Every implementation proves the contracts for its own constant.
+    - A client functor can use only the contracts, so its bounds hold for every
+      implementation.
+    - [TrieMap] implements [MAP] on the trie of Trie.v, for any [KEY].  [SumValues] is a
+      client functor over [MAP].
 
-    [TrieMap] implements [MAP] on the trie of Trie.v, for any [KEY].  [SumValues] is a client
-    functor over [MAP].
-
-    For example, [NatSum.sum_values [0; 2; 5] m] adds the values that [m] holds at the keys 0,
-    2 and 5.  Its time is linear in the lengths of the encoded keys and in the values added.
+    For example, [NatSum.sum_values [0; 2; 5] m] adds the values that [m] holds at the keys
+    0, 2 and 5.  Its time is linear in the lengths of the encoded keys and in the values added.
 
     Builds on: Time Tactics Std Trie *)
 

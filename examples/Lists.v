@@ -1,9 +1,10 @@
 (** * Time functions of list functions
 
-    Read this example first.  It derives the time functions of [append], of two ways to
-    reverse a list and of [map], and proves a bound on each.  Each section adds one idea:
-    reading a time function, proving a bound, stating the complexity, comparing two algorithms,
-    and passing a function as an argument.
+    - [append]: its time function [T_append], and the cost equations of [T_append].
+    - Bounds on [T_append], by hand and with [time_step].
+    - A big-O statement for [append].
+    - [slow_rev] and [rev_onto]: a quadratic and a linear way to reverse a list.
+    - [map] and [add_to_all]: functions as arguments, and their companions.
 
     For example, [TimeFun append] defines [T_append], and [T_append [1; 2; 3] [4; 5] = 4]:
     one step for each element of the first list, and one for the final call on [[]].

@@ -1,13 +1,21 @@
 (** * Time functions
 
-    This file defines [TimeFun].  [TimeFun f] reads the definition of [f] and defines a new
-    function [T_f], which takes the same arguments and returns the number of steps that [f]
-    takes on them.  A step is one call: of a defined function, or of the body of a closure.  The
-    count has type [N], a binary number, so [vm_compute] can evaluate [T_f] even when the count
-    is large.
+    [TimeFun f] reads the definition of [f] and defines a new function [T_f].
+    - [T_f] takes the arguments of [f], plus a time function after each function argument.
+    - [T_f] returns the number of steps that [f] takes on them.  A step is one call, of a
+      defined function or of the body of a closure.
+    - The count has type [N], a binary number, so [vm_compute] can evaluate [T_f] even when
+      the count is large.
 
-    For example, the file Std runs [TimeFun length] in a module named [Datatypes], the module
-    of [length], and then [Print Datatypes.T_length] shows this body.
+    Other commands, and the tactic [time_unfold]:
+    - [TimeCheck] and [TimeAudit] check time functions;
+    - [TimePrim] and [TimePrimTable] declare costs by hand;
+    - [TimeUnfold] steers the translation, and [TimeBound] registers a bound for the tactics;
+    - [TimeFunFails] tests a rejection;
+    - [time_unfold] unfolds a time function by one step.
+
+    For example, Std runs [TimeFun length] in a module named [Datatypes], the module of
+    [length].  [Print Datatypes.T_length] then shows:
 
       fun A : Type =>
       fix T_length (l : list A) : N :=
@@ -18,10 +26,6 @@
 
     The count is 1 for the call of [length], plus, for a non-empty list, the count of the
     recursive call on its tail.  So [T_length l = N.of_nat (length l) + 1].
-
-    The file also defines the commands that check time functions ([TimeCheck], [TimeAudit]),
-    declare costs by hand ([TimePrim], [TimePrimTable]), steer the translation ([TimeUnfold],
-    [TimeBound]) and test rejections ([TimeFunFails]), and the tactic [time_unfold].
 
     Builds on: Stdlib NArith, rocq-elpi *)
 
@@ -1059,7 +1063,7 @@ Elpi Export TimeCheck.
 
 (** [TimeAudit r ...] follows the calls from the roots [r], transitively.  It runs [TimeCheck]
     on every time function that it meets, and fails on a called constant that has neither a
-    time function nor a [TimePrim] cost.  Run it on the functions that you extract. *)
+    time function nor a [TimePrim] cost.  Run it on the roots of every extraction. *)
 
 Elpi Command TimeAudit.
 Elpi Accumulate Db argent.time.db.

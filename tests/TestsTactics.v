@@ -1,8 +1,10 @@
 (** * Tactic tests
 
-    This file checks the tactics on small goals: [time_unfold] unfolds one step and refolds
-    recursive calls, [time_simpl] replaces constant time functions by their value, [time_pose]
-    poses registered, sibling and conditional bounds, and [time_step] combines them.
+    The tactics on small goals:
+    - [time_unfold] unfolds one step and refolds recursive calls;
+    - [time_simpl] replaces constant time functions by their value;
+    - [time_pose] poses registered, sibling and conditional bounds;
+    - [time_step] combines them.
 
     For example, [time_pose] on a goal that mentions [T_twice 3] adds the registered bound
     [twice_bound 3].

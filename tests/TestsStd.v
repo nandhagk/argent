@@ -1,10 +1,10 @@
 (** * Tests of the bounds of Std
 
-    This file checks that the bounds of [Argent.Std] on [N] and [Z] are found by [time_step] in
-    a client.  Each client function calls standard-library functions on its own arguments, and
-    its bound follows in one line from the sibling lemmas [T_g_le] of the callees.  The bounds
-    that a later bound of Std already uses, such as [Pos.T_iter_le] in [Z.T_shiftl_le], are not
-    repeated here.
+    The bounds of [Argent.Std] on [N] and [Z], found by [time_step] in a client.
+    - Each client function calls standard-library functions on its own arguments.
+    - Its bound follows in one line from the sibling lemmas [T_g_le] of the callees.
+    - Bounds that a later bound of Std already uses, such as [Pos.T_iter_le] in
+      [Z.T_shiftl_le], are not repeated.
 
     For example, [T_use_gcd_le] bounds a call of [Z.gcd] by a quadratic in the bit lengths of
     its arguments.

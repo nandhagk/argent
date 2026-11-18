@@ -1,19 +1,20 @@
 (** * Complexity bounds
 
-    This file defines what it means for a time function to be in 𝑂, Ω or Θ of a measure, and
-    gives each bound a notation.  A bound is about a time function [T], a measure [g] and a
-    precondition [P] on one input [x], which is the tuple of all the arguments.  For example,
+    The bounds 𝑂, Ω and Θ on time functions, each with a notation.
+    - A bound relates a time function [T], a measure [g] and a precondition [P] on one input
+      [x], the tuple of all the arguments.  For example,
 
-      T ∈ 𝑂(g) for x | P   means   exists c, forall x, P x -> T x <= c * (g x + 1).
+        T ∈ 𝑂(g) for x | P   means   exists c, forall x, P x -> T x <= c * (g x + 1)
 
-    The constant [c] comes first, so it is the same for all inputs.  The [+ 1] lets a constant
-    time be in 𝑂 of a measure that can be 0, such as the length of a list.  Times and measures
-    have type [N].
-
-    The bounds are [bigO] (𝑂), [bigOmega] (Ω, a lower bound on every input), [bigTheta] (Θ,
-    both), [bigOmega_worst] (Ω in the worst case: reached on inputs of every size), [tight] (𝑂
-    together with Ω in the worst case) and [bigO_amortised] (𝑂 for the time plus the change of a
-    potential).  The module [ComplexityNotations] writes each of them in the form above.
+    - The constant [c] comes first, so it is the same for all inputs.
+    - The [+ 1] lets a constant time be in 𝑂 of a measure that can be 0, such as the length
+      of a list.
+    - Times and measures have type [N].
+    - The bounds are [bigO] (𝑂), [bigOmega] (Ω, a lower bound on every input), [bigTheta] (Θ,
+      both), [bigOmega_worst] (Ω in the worst case: reached on inputs of every size), [tight]
+      (𝑂 together with Ω in the worst case) and [bigO_amortised] (𝑂 for the time plus the
+      change of a potential).
+    - The module [ComplexityNotations] writes each of them in the form above.
 
     For example, [T_length l ∈ Θ(N.of_nat (length l)) for l] holds with the constant 1,
     because [T_length l = N.of_nat (length l) + 1].

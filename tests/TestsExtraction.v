@@ -1,9 +1,10 @@
 (** * Extraction of the accessibility loop
 
-    This file extracts [loop] and [countdown].  The extracted [loop] takes the step function
-    and the state only: the relation and the accessibility proof are erased, and there is no
-    fuel.  No time function is reachable from the extracted code.  The build log records the
-    output, and the report quotes it.  The file also audits the roots of the examples.
+    - Extraction of [loop], [countdown] and [log2].
+    - The extracted [loop] takes the step function and the state only: the relation and the
+      accessibility proof are erased, and there is no fuel.
+    - No time function is reachable from the extracted code.
+    - [TimeAudit] checks the roots of the examples.
 
     For example, the extracted [countdown] calls [loop] with [count_step] and its argument.
 
