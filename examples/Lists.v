@@ -70,8 +70,9 @@ Proof.
 Qed.
 
 (** [time_step] does those steps for a goal [T_f args <= bound]: it unfolds [T_f] once, adds
-    the bounds that it knows for the time functions in the goal, including the induction
-    hypothesis, and solves the arithmetic.  Most bounds take one line. *)
+    the bounds that it knows for the other time functions in the goal, and solves the
+    arithmetic with the hypotheses in context, such as the induction hypothesis.  Most bounds
+    take one line. *)
 Theorem T_append_le {A : Type} (l1 l2 : list A) :
   T_append l1 l2 <= N.of_nat (length l1) + 1.
 Proof.
