@@ -40,11 +40,12 @@ Alternatives, and what each one loses:
 | Alternative | What it loses |
 | --- | --- |
 | A writer monad that counts ticks, with charges placed by hand | Every function has a costed twin and an equation relating the two, and a lint must check where the charges are. Proofs about values see the monad. |
-| A monad whose cost lives in a `Prop` index [2] | Programs stay monadic, and charges are placed by hand. |
+| A monad whose cost lives in a `Prop` index [2] | Programs are written in the monad. A separate preprocessor inserts the charges. |
 | A functor over an abstract monad, instantiated at the identity and at a counter | Code stays monadic, and Rocq has no parametricity theorem to relate the two instances. |
 | A translator in Ltac2 | Ltac2 has no command API and no persistent database, and building `match` and `fix` terms is fragile. Elpi binds variables in higher-order abstract syntax, and it is packaged. |
-| Certifying extraction to the weak call-by-value λ-calculus L [3] | Its cost model is reasonable only up to a polynomial, so it is not tight for data structures. |
+| Certifying extraction to the weak call-by-value λ-calculus L [3] | The user supplies each time function, and tactics infer its recurrences. Its cost model is reasonable only up to a polynomial, so it is not tight for data structures. |
 | Time credits in CFML or Iris [4, 5] | They verify OCaml or HeapLang programs, not Gallina. |
+| Clairvoyance and demand semantics for lazy programs [14, 15] | Programs are translated into a monad by hand. |
 | Calf, Liquid Haskell `RTick`, RaML [6, 7, 8] | They need another proof assistant, ticks placed by hand, or an uncertified analysis. |
 
 ## 2. The translation
@@ -381,8 +382,8 @@ Argent ships no lint.
 ## 7. Literature
 
 1. Nipkow, Eberl and Haslbeck (eds.), *Functional Data Structures and Algorithms: A Proof
-   Assistant Approach*, ACM Books, 2025, §1.5. The Isabelle command `HOL-Library.Time_Commands`
-   by J. Stahl is documented in
+   Assistant Approach*, ACM Books, 2025, §1.5. Isabelle automates the method with the command
+   `time_fun` of `HOL-Library.Time_Commands`, by J. Stahl, documented in
    [Time_Manual](https://isabelle.in.tum.de/library/HOL/HOL-Library/Time_Manual.html). Its
    zero-time primitives include polymorphic equality, which Argent avoids.
 2. McCarthy, Fetscher, New, Feltey and Findler, "A Coq library for internal verification of
@@ -400,3 +401,4 @@ Argent ships no lint.
     "Amortized computational complexity", 1985.
 13. Tassi, "Elpi: an extension language for Coq", CoqPL 2018.
 14. Xia and others, demand semantics, ICFP 2024.
+15. Li, Xia and Weirich, "Reasoning about the garden of forking paths", ICFP 2021.
