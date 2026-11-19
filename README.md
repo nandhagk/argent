@@ -1,7 +1,6 @@
 # Argent
 
-Argent is a Rocq library for proving running-time bounds on Gallina programs. Its command
-`TimeFun`, written in rocq-elpi, derives the time function of a definition automatically.
+Argent is a Rocq library for proving running-time bounds on Gallina programs. Its command `TimeFun`, written in rocq-elpi, derives the time function of a definition automatically.
 
 - `TimeFun f` reads the body of `f` and defines `T_f`.
 - `T_f` takes the arguments of `f`, plus a time function for each function argument.
@@ -55,8 +54,7 @@ fix T_append (A : Type) (l1 l2 : list A) {struct l1} : N :=
 - `l2` and `x ::` cost nothing: variables and constructors are free.
 - `A` is implicit, as in `append`.
 
-The exact cost, by induction. `T_append_nil` and `T_append_cons` are the two cases of
-`T_append`, stated in the file and proved by `reflexivity`.
+The exact cost, by induction. `T_append_nil` and `T_append_cons` are the two cases of `T_append`, stated in the file and proved by `reflexivity`.
 
 ```coq
 Theorem T_append_exact {A : Type} (l1 l2 : list A) :
@@ -129,14 +127,11 @@ just test
 
 - [`docs/tutorial.md`](docs/tutorial.md): the library step by step, through the examples.
 - [`docs/reference.md`](docs/reference.md): cost model, commands, tactics, bounds, error codes.
-- [`docs/design.md`](docs/design.md): how the translation works, why its costs match the
-  extracted program, and the limits of the design.
+- [`docs/design.md`](docs/design.md): how the translation works, why its costs match the extracted program, and the limits of the design.
 
 ## Related work
 
-Argent ports the time functions of Nipkow, Eberl and Haslbeck, *Functional Data Structures and
-Algorithms* (ACM Books, 2025), §1.5, to Rocq. Isabelle automates the same method with the
-command `time_fun` (HOL-Library.Time_Commands).
+Argent ports the time functions of Nipkow, Eberl and Haslbeck, *Functional Data Structures and Algorithms* (ACM Books, 2025), §1.5, to Rocq. Isabelle automates the same method with the command `time_fun` (HOL-Library.Time_Commands).
 
 Rules shared with the book:
 
@@ -144,39 +139,25 @@ Rules shared with the book:
 - A call costs the costs of its arguments, plus the time function of the callee.
 - `if` and `match` cost their scrutinee plus the branch taken. `let` costs its value once.
 - Variables and constructors cost nothing.
-- Amortised bounds use the book's potential inequality: `T_f s + Φ (f s) - Φ s` is at most the
-  amortised cost.
+- Amortised bounds use the book's potential inequality: `T_f s + Φ (f s) - Φ s` is at most the amortised cost.
 
 Differences:
 
-- Argent adds 1 for every call. The book drops it for non-recursive functions, as if they were
-  inlined. This changes the count by at most a constant factor, plus a constant.
-- Arithmetic and comparisons cost what their Gallina code costs, such as unary addition on
-  `nat`. The book counts operations on booleans and numbers as free, assuming fixed-size
-  numbers. In Argent, `TimePrim` declares the cost of an operation extracted to native code.
-- A function argument comes with its time function, as in `time_fun`. Argent also supports
-  partial applications, which `time_fun` rejects.
+- Argent adds 1 for every call. The book drops it for non-recursive functions, as if they were inlined. This changes the count by at most a constant factor, plus a constant.
+- Arithmetic and comparisons cost what their Gallina code costs, such as unary addition on `nat`. The book counts operations on booleans and numbers as free, assuming fixed-size numbers. In Argent, `TimePrim` declares the cost of an operation extracted to native code.
+- A function argument comes with its time function, as in `time_fun`. Argent also supports partial applications, which `time_fun` rejects.
 - Times have type `N`, which `vm_compute` evaluates quickly. The book uses `nat`.
-- The book states bounds with explicit constants and avoids asymptotic notation. Argent adds a
-  big-O notation (`Complexity`).
-- Argent also checks stored time functions against their definitions (`TimeCheck`,
-  `TimeAudit`), and covers signatures with time bounds, loops, and well-founded recursion with
-  `Fix`.
+- The book states bounds with explicit constants and avoids asymptotic notation. Argent adds a big-O notation (`Complexity`).
+- Argent also checks stored time functions against their definitions (`TimeCheck`, `TimeAudit`), and covers signatures with time bounds, loops, and well-founded recursion with `Fix`.
 
 Other Rocq work on running time:
 
-- McCarthy, Fetscher, New, Feltey and Findler (FLOPS 2016): programs are written in a cost
-  monad, and a preprocessor inserts the charges.
-- Forster and Kunze (ITP 2019): extraction to the λ-calculus L. The user supplies the time
-  function, and tactics infer its recurrences. Costs are steps of L, polynomially related to
-  Turing-machine time.
-- CFML and Iris time credits (Charguéraud and Pottier, ITP 2015; Mével, Jourdan and Pottier,
-  ESOP 2019): they verify OCaml or HeapLang programs, not Gallina.
-- Li, Xia and Weirich (ICFP 2021) and Xia et al. (ICFP 2024): costs of lazy programs, which are
-  translated into a monad by hand.
+- McCarthy, Fetscher, New, Feltey and Findler (FLOPS 2016): programs are written in a cost monad, and a preprocessor inserts the charges.
+- Forster and Kunze (ITP 2019): extraction to the λ-calculus L. The user supplies the time function, and tactics infer its recurrences. Costs are steps of L, polynomially related to Turing-machine time.
+- CFML and Iris time credits (Charguéraud and Pottier, ITP 2015; Mével, Jourdan and Pottier, ESOP 2019): they verify OCaml or HeapLang programs, not Gallina.
+- Li, Xia and Weirich (ICFP 2021) and Xia et al. (ICFP 2024): costs of lazy programs, which are translated into a monad by hand.
 
-As far as we know, no other Rocq tool derives time functions automatically from plain Gallina
-definitions. [`docs/design.md`](docs/design.md#1-decision) compares the alternatives.
+As far as we know, no other Rocq tool derives time functions automatically from plain Gallina definitions. [`docs/design.md`](docs/design.md#1-decision) compares the alternatives.
 
 ## Licence
 
