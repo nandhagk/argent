@@ -1,6 +1,6 @@
 # Argent
 
-Argent is a Rocq library for proving running-time bounds on Gallina programs. Its command `TimeFun`, written in rocq-elpi, derives the time function of a definition automatically.
+Argent is a Rocq library for proving running-time bounds on Gallina programs. Its command `TimeFun`, written in [rocq-elpi](https://github.com/LPCIC/coq-elpi), derives the time function of a definition automatically.
 
 - `TimeFun f` reads the body of `f` and defines `T_f`.
 - `T_f` takes the arguments of `f`, plus a time function for each function argument.
